@@ -2,7 +2,7 @@
 
 ## 职责与入口
 
-- `agent_factory.py` 定义组装流程；`main.py` 提供 `main_agent` 工厂及追踪包装；`web.py` 提供 `web_agent` 子 Agent 工厂。
+- `agent_factory.py` 定义组装流程；`main.py` 提供 `main_agent` 工厂及追踪包装；`retrieve_agent.py` 提供 `retrieve_agent` 工厂及追踪包装；`web.py` 提供 `web_agent` 子 Agent 工厂。
 - `main_agent_state.py` 在 `DeepAgentState` 上增加 `turn_summary`，与轮次中间件保持一致。
 
 ## 创建流程
@@ -20,7 +20,7 @@
 
 ## 修改指引
 
-- 新增子 Agent：实现工厂模块和导出 → 注册 `_AGENT_FACTORIES` → 对齐远程 AgentSpec。只有需要对外暴露为独立图时才修改 `langgraph.json`。
+- 新增子 Agent：实现工厂模块和导出 → 注册 `_AGENT_FACTORIES` → 对齐远程 AgentSpec。只有需要对外暴露为独立图时才修改 `langgraph.json`；`retrieve_agent` 就是按此方式暴露的独立 Agent 图，不是 `main_agent` 的子 Agent。
 - 优先通过 `get_backend`、`get_middlewares`、`get_state_schema` 等扩展点调整差异，公共组装流程留在基类。
 - 保留 `factory_with_trace` 的服务入口契约；改导出时同步 `langgraph.json` 和追踪逻辑。
 

@@ -4,7 +4,7 @@
 
 - `api` 已实现应用身份的知识库与新版文档（Docx）只读接口、文档图片下载及返回模型；不包含电子表格或旧版 doc。
 - 使用飞书官方 `lark-oapi` SDK，当前锁文件版本为 1.7.4；HTTP、Token 获取与缓存均由 SDK 管理，没有手写 HTTP 客户端或 Token 缓存。
-- 尚未接入 Agent 工具；已被 `graphs/feishu_doc_index` 索引流程用于目录遍历、正文读取与图片下载，结构化解析和切分由 `rag` 相应模块完成，检索尚未实现。
+- 尚未接入 Agent 工具；已被 `graphs/feishu_doc_index` 索引流程用于目录遍历、正文读取与图片下载，结构化解析和切分由 `rag` 相应模块完成，检索由 `rag/retriever/feishu_doc` 提供并被 `retrieve_agent` 图调用。
 
 ## 约定
 

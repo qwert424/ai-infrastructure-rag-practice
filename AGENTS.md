@@ -15,7 +15,7 @@
 
 - 当前项目是 Python Agent 服务：以 LangGraph Server 提供运行入口，以 Deep Agents 组装 Agent，以 Nacos 管理 AgentSpec、Prompt、Skill、MCP 与沙箱配置。
 - Langfuse 用于追踪、离线评测和 Webhook；OpenSandbox 提供用户执行环境；MinIO 用于产物存储与交付；模型通过 OpenAI 兼容接口及自定义模型适配层调用。
-- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索由 `rag/retriever/feishu_doc` 的 `search()` 提供（双路召回加重排），尚未接入 Agent 主流程或工具；存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
+- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索由 `rag/retriever/feishu_doc` 的 `search()` 提供（双路召回加重排），并由独立图 `retrieve_agent` 的 `before_agent` 中间件在每轮开始前调用、把结果作为消息注入；未注册为工具，也未接入 `main_agent`。存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
 - 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。课件与 RAG 存储模块通过 PyMilvus 连接，不依赖 Milvus Lite。Milvus 的文本重排凭据放在本地 `docker/milvus/user.yaml`（已 gitignore，按 `user.yaml.example` 创建），只读挂载到容器 `/milvus/configs/user.yaml`；该文件含 API Key，不得入库或写进文档。
 - `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；已被 `graphs/feishu_doc_index` 索引流程调用，尚未接入 Agent 主流程；本地 Mock 测试不代表真实租户验证。
 - 鉴权当前使用 `utils/mock_user.py` 中的模拟用户；告警 Webhook 已验签并接收事件，尚未实现短信或邮件通知。
@@ -46,12 +46,12 @@
 | `tests/benchmarks`                        | 依赖真实 Agent 和 Langfuse 的质量回归                                                                                                                                               |
 | `docker/sandbox/Dockerfile`               | 沙箱镜像，包含部署所需的上传工具                                                                                                                                                    |
 
-运行入口由 `langgraph.json` 定义：`main_agent` 指向追踪包装后的 Agent 工厂，`delete_old_trace` 指向清理图，`feishu_doc_index` 指向飞书文档索引图工厂；鉴权入口是 `security.auth:auth`，自定义 HTTP 应用是 `app.main:app`。调整导出名称或模块路径时同步检查该文件。
+运行入口由 `langgraph.json` 定义：`main_agent` 指向追踪包装后的 Agent 工厂，`delete_old_trace` 指向清理图，`feishu_doc_index` 指向飞书文档索引图工厂，`retrieve_agent` 指向挂载检索中间件的 Agent 工厂；鉴权入口是 `security.auth:auth`，自定义 HTTP 应用是 `app.main:app`。调整导出名称或模块路径时同步检查该文件。
 
 ## 环境与常用命令
 
 - 从项目根目录执行命令。Python 版本按 `pyproject.toml` 固定为 `3.13.11`，依赖使用 uv 管理，安装用 `uv sync`。
-- 配置项见 `.env.example` 和各 Settings 类。不要将实际 `.env` 内容、访问密钥或令牌写入文档、日志和测试输出。Nacos 通用配置的示例见 `src/deal_pilot/config/nacos/rag_config_example.yaml`（不会自动加载，需在 Nacos 发布同名 dataId）；其中 `store` 段不会被 `RagConfig` 读取，实际字段名是 `milves_stores`。
+- 配置项见 `.env.example` 和各 Settings 类。不要将实际 `.env` 内容、访问密钥或令牌写入文档、日志和测试输出。Nacos 通用配置的示例见 `src/deal_pilot/config/nacos/rag_config_example.yaml`（不会自动加载，需在 Nacos 发布同名 dataId）；存储配置段使用 `milves_stores` 字段名，顶层 `store` 不会被 `RagConfig` 读取。
 
 | 命令                                                                                                                               | 用途与前提                                                                              |
 | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |

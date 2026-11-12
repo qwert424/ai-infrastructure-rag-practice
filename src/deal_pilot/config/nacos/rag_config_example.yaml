@@ -4,7 +4,7 @@ image_parser:
   sibling_count: 3
   vl_model_config:
     # 替换为实际可用且支持图片理解的模型；省略 name 时使用 OPENAI_DEFAULT_MODEL。
-    name: '替换为支持图片理解的模型名称'
+    name: "替换为支持图片理解的模型名称"
     thinking: true
     temperature: null
     top_p: null
@@ -19,7 +19,7 @@ splitter:
   chunk_size: 1000 # 正文切片长度，单位为字符
   chunk_overlap: 200
 
-store:
+milves_stores:
   feishu_doc:
     index_type: HNSW
     metric_type: COSINE
