@@ -1,0 +1,13 @@
+# 复制为 docker/milvus/user.yaml 后填写本地网关的 API Key 与完整文本重排 Endpoint。
+# user.yaml 含凭据，已加入 .gitignore，不要提交。
+credential:
+  qwen_rerank:
+    apikey: "<YOUR_API_KEY>"
+
+function:
+  rerank:
+    model:
+      providers:
+        cohere:
+          credential: qwen_rerank
+          url: "http://host.docker.internal:4000/v1/rerank"

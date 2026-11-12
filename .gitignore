@@ -11,6 +11,9 @@ __pycache__
 # env
 .env
 
+# milvus 本地凭据（模板见 docker/milvus/user.yaml.example）
+docker/milvus/user.yaml
+
 # frontend
 node_modules
 
