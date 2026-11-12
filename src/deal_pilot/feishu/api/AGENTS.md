@@ -5,20 +5,22 @@
 - `wiki.py:WikiAPI`：全量空间列表、空间信息、节点信息、全量直接子节点及所有空间的全层级节点。
 - `docx.py:DocxAPI`：新版文档元信息查询和全量块列表；不含旧版 doc。
 - `image.py:ImageAPI`：通过 Drive 素材接口下载 Docx 图片，返回 `DownloadedImage(mime: str, data: bytes)`。
-- `message.py:MessageAPI`：以应用身份发送文本消息（`im/v1/messages`），`receive_id_type` 支持 open_id/union_id/user_id/email/chat_id，可选 `uuid` 去重。
+- `message.py:MessageAPI`：以应用身份发送文本消息（`im/v1/messages`，`receive_id_type` 支持 open_id/union_id/user_id/email/chat_id，可选 `uuid` 去重）及撤回消息；卡片操作在 `card.py`。
+- `card.py:CardAPI/Card`：CardKit 实体创建、流式文本、配置、全量/批量/组件级更新，以及卡片消息发送、回复、按消息 ID 更新、撤回、延时更新和临时卡片；`Card` 对象持有 card_id、message_id、递增 sequence 与更新锁。
+- `_message.py`：文本与卡片共用的 IM 投递入口（`send_message`、`validate_recipient`），不依赖具体业务 API 类。
 - `models.py`：应用层 Pydantic 返回模型；不是官方响应结构的完整复刻。
 - `_client.py`：官方 SDK 客户端、线程隔离、响应校验、资源 ID 校验及分页；不自行管理 Token 或 HTTP。
 - `errors.py`：配置、Token 获取、业务响应、HTTP 状态、协议结构及不支持节点类型的错误。
-- `__init__.py`：导出 WikiAPI、DocxAPI、ImageAPI 和 MessageAPI，没有模块级 API 实例，导入不请求网络。
+- `__init__.py`：导出 WikiAPI、DocxAPI、ImageAPI、MessageAPI、CardAPI 和 Card，没有模块级 API 实例，导入不请求网络。
 
 ## 已实现的设计
 
 - 目标：复用官方 SDK，按既定签名读取知识库目录及 Docx 原始块，失败时不伪装完整结果。
-- 选定方案：使用官方 lark-oapi（当前 uv.lock 为 1.7.4）及其请求 Builder 和 Wiki/Docx/Drive 资源方法；
+- 选定方案：使用官方 lark-oapi（当前 uv.lock 为 1.7.5）及其请求 Builder 和 Wiki/Docx/Drive/IM/CardKit 资源方法；
   用 feishu_settings.app_id/app_secret 构建客户端，超时 30 秒、日志级别 ERROR。
-- 原因：HTTP、鉴权和 Token 缓存复用官方能力；1.7.4 的异步资源方法仍同步调用 verify/TokenManager，
+- 原因：HTTP、鉴权和 Token 缓存复用官方能力；1.7.x 的异步资源方法仍同步调用 verify/TokenManager，
   所以通过 asyncio.to_thread 执行完整同步 SDK 调用，隔离鉴权和数据请求的阻塞。
-- 实现状态：全部 8 个读取方法使用官方 SDK；已删除手写 HTTP 和 Token 缓存实现。
+- 实现状态：全部读取方法与消息/卡片接口使用官方 SDK；已删除手写 HTTP 和 Token 缓存实现。
   本地 Mock 测试与源码类型检查通过，真实租户尚未验证。
 
 ## 读取契约
@@ -48,6 +50,16 @@
 - `receive_id_type` 支持 open_id、union_id、user_id、email、chat_id；群聊回复使用原消息 `chat_id`。`receive_id` 必须非空且不含空白。
 - `text` 必须非空白；`uuid` 为 1–50 字符的可选发送去重标识。参数错误抛 ValueError，业务错误沿用 `FeishuAPIError`，响应缺 `message_id` 抛 `FeishuResponseError`。
 - 不自动重试、不切换身份；调用方须已启用机器人能力并具备 `im:message:send_as_bot`（或 `im:message`）权限。
+
+## 卡片契约
+
+- 卡片内容使用飞书 JSON 2.0 原生字典，封装只做序列化与调用，不实现组件 Schema 或可视化搭建；空字典与不可序列化值直接报 ValueError。
+- `Card.create(card, receive_id=None, receive_id_type="open_id", uuid=None)` 会覆写 `config.streaming_mode/update_multi=True`（不修改传入字典），创建实体后可同时投递；创建与投递是两次请求，投递失败时尽力 `finish()` 关闭流式再抛原异常。
+- `Card` 对象持有 `card_id`、`message_id`、严格递增的 `sequence`（上限 2147483647）与 `asyncio.Lock`：同一对象的更新串行执行，必须在同一事件循环内使用，不提供跨对象/进程协调或持久化。取消不撤回已分配序号，仅排队等待的更新不消耗序号。
+- `stream_text(element_id, text)` 传累计全文而不是增量；`finish()` 无参数关闭流式模式并保留已提交内容，不重写整卡。
+- 接管已有卡片只能用 `Card(card_id, sequence=已用序号)` 或 `Card.from_message(message_id, sequence=...)`，接口不会查询远端序号。
+- `CardAPI` 是无状态底层入口，额外提供 `send_card`、`reply_card`、`update_card`（按 message_id）、`recall`、`delayed_update_card`、`send_ephemeral_card`、`delete_ephemeral_card`；后三个历史接口经官方 `Client.request` 调用。
+- 权限：实体创建与更新需 `cardkit:card:write`，投递/回复需 `im:message:send_as_bot`（或 `im:message`）；真实渲染、频控、临时卡片限制与长连接回调须在租户环境验证。
 
 ## SDK 与并发边界
 

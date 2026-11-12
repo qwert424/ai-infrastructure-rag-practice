@@ -3,7 +3,7 @@ import logging
 import re
 from collections import OrderedDict
 
-from deal_pilot.feishu.api import MessageAPI
+from deal_pilot.event.message.reply import reply
 from deal_pilot.feishu.event.models import FeishuEvent
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ async def message_handler(event: FeishuEvent) -> None:
         return
 
     try:
-        await MessageAPI().send_text(chat_id, text, receive_id_type="chat_id")
+        await reply(chat_id, text, receive_id_type="chat_id")
     except Exception:
         logger.exception("回复飞书消息失败：%s", message_id)
         # 发送失败不占用幂等标记，飞书重投时仍可尝试。

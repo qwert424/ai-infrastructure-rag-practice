@@ -2,8 +2,8 @@ import asyncio
 import logging
 
 from deal_pilot.config.feishu_settings import feishu_settings
+from deal_pilot.event.message.message_handler import message_handler
 from deal_pilot.feishu.event import feishu_event_listener
-from deal_pilot.event.message_handler import message_handler
 
 logger = logging.getLogger(__name__)
 

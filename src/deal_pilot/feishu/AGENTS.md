@@ -2,14 +2,14 @@
 
 ## 职责与当前状态
 
-- `api` 已实现应用身份的知识库与新版文档（Docx）只读接口、文档图片下载、文本消息发送及返回模型；不包含电子表格或旧版 doc。
+- `api` 已实现应用身份的知识库与新版文档（Docx）只读接口、文档图片下载、文本消息与卡片消息（CardKit 实体、流式更新、发送/回复/撤回）及返回模型；不包含电子表格或旧版 doc。
 - 使用飞书官方 `lark-oapi` SDK，当前锁文件版本为 1.7.4；HTTP、Token 获取与缓存均由 SDK 管理，没有手写 HTTP 客户端或 Token 缓存。
 - 尚未接入 Agent 工具；已被 `graphs/feishu_doc_index` 索引流程用于目录遍历、正文读取与图片下载，结构化解析和切分由 `rag` 相应模块完成，检索由 `rag/retriever/feishu_doc` 提供并被 `retrieve_agent` 图调用。
 - `event` 子目录提供 IM 事件长连接、进程内 IPC 与回调分发，由 `../event` 注册业务回调。
 
 ## 约定
 
-- 使用 `from deal_pilot.feishu.api import WikiAPI, DocxAPI, ImageAPI, MessageAPI`，API 类使用 Python 默认构造，没有模块级 API 实例。
+- 使用 `from deal_pilot.feishu.api import WikiAPI, DocxAPI, ImageAPI, MessageAPI, CardAPI, Card`，API 类使用 Python 默认构造，没有模块级 API 实例。
 - 直接使用 `config/feishu_settings.py:feishu_settings` 中的 app_id/app_secret；导入不请求网络，缺少配置在调用时抛出 FeishuConfigurationError。
 - 知识库的 `node_token` 与实际内容的 `obj_token` 不可混用；先判断 `obj_type` 再交给内容 API。
 - 本目录不负责结构化解析、切分、索引、检索或 Agent 工具注册。

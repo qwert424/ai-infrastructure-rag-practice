@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
 
 import lark_oapi as lark
+from lark_oapi.api.cardkit.v1.version import V1 as CardkitV1
 from lark_oapi.api.docx.v1.version import V1 as DocxV1
 from lark_oapi.api.drive.v1.version import V1 as DriveV1
 from lark_oapi.api.im.v1.version import V1 as ImV1
@@ -65,6 +66,12 @@ def im_client() -> ImV1:
     client = _client()
     assert client.im is not None
     return client.im.v1
+
+
+def cardkit_client() -> CardkitV1:
+    client = _client()
+    assert client.cardkit is not None
+    return client.cardkit.v1
 
 
 def resource_id(value: str, name: str) -> str:

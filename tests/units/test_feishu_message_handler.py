@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-import deal_pilot.event.message_handler as handler_module
-from deal_pilot.event.message_handler import message_handler
+import deal_pilot.event.message.message_handler as handler_module
+from deal_pilot.event.message.message_handler import message_handler
 from deal_pilot.feishu.event.models import FeishuEvent
 
 
@@ -18,9 +18,9 @@ def _clear_seen(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def send_text(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
-    api = AsyncMock()
-    monkeypatch.setattr(handler_module, "MessageAPI", lambda: api)
-    return api.send_text
+    fake = AsyncMock()
+    monkeypatch.setattr(handler_module, "reply", fake)
+    return fake
 
 
 def _text_message(**overrides: object) -> dict:
