@@ -13,7 +13,7 @@
 构建 metadata → 读取正文 → 结构化 → Loader → Splitter → 写入切片 → 清理旧版本实体 → 收尾。
 
 - fetch_document_version 用 node.obj_token 调用 DocxAPI.get_document。compare_versions 通过 `store.aclient.query` 按 `obj_token == document.document_id` 查询 revision_id，limit=1；无记录或第一条记录版本不同则需要索引。当前不按 node_token 隔离、不排序，也不检查所有切片是否完整；同文档被多个 Wiki 节点引用或混合版本时不能据此保证判断准确。
-- metadata 保存 space_id、node_token、node_title、obj_token、parent_node_token、url 和本次读取的 revision_id。
+- metadata 保存 space_id、space_title、node_token、node_title、obj_token、parent_node_token、url 和本次读取的 revision_id。space_title 优先取 node.space_name（`list_all_space_nodes` 已填充），为 None 时（如单节点重跑）回退 `WikiAPI.get_space`；空间不存在、标题为空或超过 300 字节时抛 ValueError，该文档记为失败。
 - fetch_document_content 当前只调用 `list_blocks(document.document_id)`，没有传 document_revision_id，实际使用 API 默认的最新版本。不能按函数注释宣称正文固定为元信息版本；两次读取之间文档变化时没有一致性校验。
 - structure_document、load_documents 复用现有构树与 Loader；构树会调用 `image_parser.parse_image_block`，真实执行图片下载（Drive 素材接口）、私有桶上传与模型识图，因此失败清单中的错误可能来自飞书权限、MinIO 或视觉模型，不限于正文读取。
 - split_documents 读取 Nacos rag_config.splitter，显式传入 chunk_size、chunk_overlap；默认分别为 1000、200，单位为字符，与切片函数直接调用的 overlap 默认值 100 区分。

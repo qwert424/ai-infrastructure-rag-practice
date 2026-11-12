@@ -27,7 +27,7 @@ from deal_pilot.feishu.api.errors import (
 from deal_pilot.feishu.api.models import WikiNode, WikiSpace
 
 
-def _wiki_node(data: dict[str, JsonValue]) -> WikiNode:
+def _wiki_node(data: dict[str, JsonValue], *, space_name: str | None = None) -> WikiNode:
     if data.get("obj_type") != "docx":
         raise UnsupportedWikiNodeTypeError("WikiAPI 当前仅支持 obj_type=docx 的节点")
     token = data.get("node_token")
@@ -39,6 +39,7 @@ def _wiki_node(data: dict[str, JsonValue]) -> WikiNode:
             **data,
             "url": f"https://www.feishu.cn/wiki/{node_token}",
             "parent_node_token": data.get("parent_node_token") or None,
+            "space_name": space_name,
         }
     )
 
@@ -142,8 +143,9 @@ class WikiAPI:
         space_id: str,
         *,
         parent_node_token: str | None = None,
+        space_name: str | None = None,
     ) -> AsyncIterator[WikiNode]:
-        """按需读取直接子节点分页，不递归或预取。"""
+        """按需读取直接子节点分页，不递归或预取；space_name 仅用于填充节点。"""
         space_id = resource_id(space_id, "space_id")
         if parent_node_token is not None:
             resource_id(parent_node_token, "parent_node_token")
@@ -159,7 +161,7 @@ class WikiAPI:
             return await sdk_call(lambda: api.space_node.list(request))
 
         async for item in iter_items(fetch_page):
-            yield _wiki_node(item)
+            yield _wiki_node(item, space_name=space_name)
 
     async def list_all_space_nodes(self) -> AsyncIterator[WikiNode]:
         """按需迭代所有可访问知识空间中、全部层级的节点。
@@ -170,7 +172,8 @@ class WikiAPI:
 
         Yields:
             根目录节点及全部后代节点，按空间和目录广度优先顺序产出。
-            每项通过 space_id 标识所属空间；同一 (space_id, node_token) 只产出一次，
+            每项通过 space_id 标识所属空间，space_name 由所属空间名称填充，
+            因此无需再调用 get_space；同一 (space_id, node_token) 只产出一次，
             指向相同 obj_token 的不同节点仍分别保留。没有节点时直接结束。
             不读取节点关联的文档正文。
         """
@@ -181,7 +184,9 @@ class WikiAPI:
             while parents:
                 parent = parents.popleft()
                 async for node in self._iter_nodes(
-                    space.space_id, parent_node_token=parent
+                    space.space_id,
+                    parent_node_token=parent,
+                    space_name=space.name,
                 ):
                     key = (node.space_id, node.node_token)
                     if key in seen:

@@ -39,9 +39,9 @@
 | `src/deal_pilot/rag/structure/feishu_doc` | 异步构树、原始关系校验、标题归组、内容及元数据提取；完整树构建后按文档顺序串行调用图片处理（下载、私有桶上传、模型识图）；提供 Data URL、图片上下文辅助函数及树形字典往返               |
 | `src/deal_pilot/rag/loader/feishu_doc`    | 标准树到 LangChain Documents 的本地结构提取；父子占位引用、Markdown 正文、HTML 表格与合并校验，不按长度切片                                                                         |
 | `src/deal_pilot/rag/splitter/feishu_doc`  | 结构 Documents 的本地进一步切片；图片/代码整体保留，表格首行表头加单行，页面/章节按段落、句子和长度切分，保护占位符并保留目标 overlap                                               |
-| `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索尚未实现                     |
-| `tests/units`                             | 函数缓存、飞书 Mock、文档构树、Documents 结构提取及进一步切片单元测试                                                                                                               |
-| `tests/intergrations`                     | MinIO 与 Deploy 集成测试，保留现有目录拼写                                                                                                                                          |
+| `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化、可空字段与长度扩容的原地 Schema 同步、`space_title` 回填及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索尚未实现 |
+| `tests/units`                             | 函数缓存、飞书 Mock、文档构树、Documents 结构提取、进一步切片及 Milvus Schema 同步/标题回填单元测试                                                                                 |
+| `tests/intergrations`                     | MinIO、Deploy 与 Milvus Schema 同步集成测试，保留现有目录拼写                                                                                                                       |
 | `tests/benchmarks`                        | 依赖真实 Agent 和 Langfuse 的质量回归                                                                                                                                               |
 | `docker/sandbox/Dockerfile`               | 沙箱镜像，包含部署所需的上传工具                                                                                                                                                    |
 

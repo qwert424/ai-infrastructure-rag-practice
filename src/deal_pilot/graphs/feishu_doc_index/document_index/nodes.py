@@ -4,6 +4,7 @@ from typing import Literal
 
 from deal_pilot.config.nacos.nacos_config import get_config
 from deal_pilot.config.nacos.nacos_schemas import RagConfig
+from deal_pilot.feishu.api import WikiAPI
 from deal_pilot.graphs.feishu_doc_index.document_index.state import (
     DocumentIndexState,
 )
@@ -62,9 +63,19 @@ async def build_metadata(state: DocumentIndexState) -> DocumentIndexState:
     node = state.get("node")
     assert doc is not None
     assert node is not None
+    space_title = node.space_name
+    if space_title is None:
+        # list_all_space_nodes 未填充名称时（如单节点重跑）回退查询空间。
+        space = await WikiAPI().get_space(node.space_id)
+        if space is None:
+            raise ValueError(f"知识空间 {node.space_id} 不存在，无法读取标题")
+        space_title = space.name
+    if not space_title or len(space_title.encode("utf-8")) > 300:
+        raise ValueError(f"知识空间 {node.space_id} 的标题为空或超过 300 字节")
     return {
         "metadata": {
             "space_id": node.space_id,
+            "space_title": space_title,
             "node_token": node.node_token,
             "node_title": node.title,
             "obj_token": node.obj_token,

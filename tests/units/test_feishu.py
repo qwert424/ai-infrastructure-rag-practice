@@ -125,6 +125,7 @@ def test_get_space_node_and_docx_mapping_share_token(mock_feishu):
         entry = await WikiAPI().get_node("n1")
         assert space is not None and space.description is None
         assert entry is not None and entry.parent_node_token is None
+        assert entry.space_name is None
         assert entry.url == "https://www.feishu.cn/wiki/n1"
         assert entry.node_token != entry.obj_token
         document = await DocxAPI().get_document(entry.obj_token)
@@ -132,6 +133,24 @@ def test_get_space_node_and_docx_mapping_share_token(mock_feishu):
 
     asyncio.run(scenario())
     assert sum(r.method == "POST" for r in requests) == 1
+
+
+def test_only_full_space_traversal_fills_space_name(mock_feishu):
+    def handler(request):
+        if request.url.path.endswith("/spaces"):
+            return page([{"space_id": "s1", "name": "产品知识库"}])
+        assert "/spaces/s1/nodes" in request.url.path
+        return page([node("n1")])
+
+    mock_feishu(handler)
+
+    async def scenario():
+        full = [item async for item in WikiAPI().list_all_space_nodes()]
+        listed = await WikiAPI().list_nodes("s1")
+        assert [item.space_name for item in full] == ["产品知识库"]
+        assert [item.space_name for item in listed] == [None]
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("mime", ["image/png", "image/jpeg; charset=binary", "IMAGE/WEBP"])

@@ -36,6 +36,10 @@ class WikiNode(BaseModel):
     parent_node_token: str | None = Field(
         default=None, description="父节点；根节点为 None"
     )
+    space_name: str | None = Field(
+        default=None,
+        description="所属知识空间名称；仅 list_all_space_nodes 填充，其余读取路径为 None",
+    )
 
 
 class DocxDocument(BaseModel):
