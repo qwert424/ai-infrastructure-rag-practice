@@ -41,7 +41,7 @@
 | `src/deal_pilot/rag/splitter/feishu_doc`  | 结构 Documents 的本地进一步切片；图片/代码整体保留，表格首行表头加单行，页面/章节按段落、句子和长度切分，保护占位符并保留目标 overlap                                               |
 | `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化、可空字段与长度扩容的原地 Schema 同步、`space_title` 回填及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索经 `rag/retriever/feishu_doc` 使用该实例 |
 | `src/deal_pilot/rag/retriever/feishu_doc` | 双路召回与重排的 `search()`：按 `RetrieverConfig` 传入 `fetch_k`、`k`、两路 `param` 与 rrf/weighted/模型重排，返回带分数的 `SearchResult`；模型重排由 Milvus 侧调用 LiteLLM `/v1/rerank` |
-| `tests/units`                             | 函数缓存、飞书 Mock、文档构树、Documents 结构提取、进一步切片、Milvus Schema 同步/标题回填及 Nacos `rag_config` 示例校验单元测试                                                      |
+| `tests/units`                             | 函数缓存、飞书 Mock、文档构树、Documents 结构提取、进一步切片、Milvus Schema 同步/标题回填、Nacos `rag_config` 示例校验及 Benchmark 报告阈值判定单元测试                            |
 | `tests/intergrations`                     | MinIO、Deploy 与 Milvus Schema 同步集成测试，保留现有目录拼写                                                                                                                       |
 | `tests/benchmarks`                        | 依赖真实 Agent 和 Langfuse 的质量回归                                                                                                                                               |
 | `docker/sandbox/Dockerfile`               | 沙箱镜像，包含部署所需的上传工具                                                                                                                                                    |
@@ -64,7 +64,7 @@
 | `MINIO_INTEGRATION=1 DEPLOY_INTEGRATION=1 DEPLOY_SANDBOX_IMAGE=<已准备的镜像> uv run pytest -q tests/intergrations/test_deploy.py` | 真实 MinIO 与 OpenSandbox 部署验证                                                      |
 | `make test-integrations`                                                                                                           | 当前 Makefile 同时启用 MinIO 和 Deploy，并固定镜像为 `opensandbox-python-node:1.0`      |
 | `make test-benchmark DS=<数据集名称>`                                                                                              | 对指定真实数据集评测，会调用 Agent 和模型并记录实验                                     |
-| `make test-benchmark DS=all`                                                                                                       | 对全部数据集评测，注意调用量和费用                                                      |
+| `make test-benchmark DS=all`                                                                                                       | 对全部 Langfuse 数据集评测；每个数据集都需在 `experiment._config` 注册，否则抛 `RuntimeError`，注意调用量和费用          |
 
 `make docker-recreate` 会强制重建 Compose 容器，不是普通测试的准备步骤。集成测试不会替你启动服务或构建镜像；详细测试契约见 `tests/intergrations/README.md`，若其命令说明与 Makefile 不一致，以实际 Makefile 和测试启用条件为准。
 
