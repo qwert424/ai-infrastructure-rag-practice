@@ -3,7 +3,7 @@
 - 目标：将 `DocxAPI.list_blocks()` 返回的 `list[DocxBlock]` 表达为按标题层级组织的有序树。
 - 选定方案：`block_node.py` 中的 `BlockNode` 使用标准库 dataclass，独立保存 `block_id`、`block_type`、`content` 和 JSON 兼容的 `payload`，不持有 `DocxBlock`；通过 `parent`、`children`、`prev`、`next` 引用其他节点。
 - 原因：节点独立承载 ID、类型和自身内容，通过标题父子关系表达章节归属；payload 提取代码语言及表格行列数、合并信息，其他数据预留用户后续按需添加。所有块共用节点类型，兄弟引用与父节点的有序子列表保持一致。
-- 实现状态：已有节点类型、`append(child)`、`remove()` 关系维护方法及异步 `tree_builder.build_tree(blocks: list[DocxBlock]) -> BlockNode`，调用须 `await build_tree(blocks)`；已实现原始关系校验、按标题层级构树、纯文本、图片 token、代码语言、指定表格属性提取，以及构树完成后按文档顺序串行处理图片。Markdown 格式转换和通用序列化未实现；`image_parser.parse_image_block` 当前仍是异步占位函数，未编排图片下载、上传或模型解析；仅补齐独立辅助函数。
+- 实现状态：已有节点类型、`append(child)`、`remove()` 关系维护方法及异步 `tree_builder.build_tree(blocks: list[DocxBlock]) -> BlockNode`，调用须 `await build_tree(blocks)`；已实现原始关系校验、按标题层级构树、纯文本、图片 token、代码语言、指定表格属性提取，以及构树完成后按文档顺序串行处理图片。`to_dict()`/`BlockNode.from_dict()` 提供不含循环引用的树形字典往返（`BlockNodeDict`，`payload` 深拷贝），StateGraph 状态用它传递整棵树；Markdown 格式转换等其他序列化仍未实现。`image_parser.parse_image_block` 已编排图片下载、私有桶上传和模型识图，构树时会真实调用，缺权限或图片服务不可用会中止该文档。
 - `append(child)` 将节点及其子树移动到子列表末尾，自动脱离原父节点；同父节点内调用会移到末尾，不重复添加。添加自身或祖先时先抛出 ValueError，不改变原树。
 - `remove()` 按对象身份从父节点的子列表中移除当前节点，连接原前后兄弟，清空当前节点的 parent/prev/next；保留内容、payload 和子树内部引用。对根节点或已脱离节点重复调用无副作用；父节点存在但子列表没有当前对象时抛出 ValueError。
 - 方法要求输入树关系一致，并维护父子及兄弟引用；直接赋值或修改 children 不会自动校验，不保证修复任意已损坏的树。

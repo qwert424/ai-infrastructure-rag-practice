@@ -19,6 +19,6 @@
 ## 生命周期与验证
 
 - 每次工厂调用有独立的闭包迭代器；本地新运行也应重新 `await factory()`。导入及构图只定义流程，开始消费目录才请求飞书；没有跨进程恢复迭代器进度或自动注册调度计划的实现。
-- 子图已接通版本读取与比较、元数据、正文、构树、Loader、Splitter、Milvus 写入及旧版本实体清理；图片识图仍未实现，具体限制见 `document_index/AGENTS.md`。
+- 子图已接通版本读取与比较、元数据、正文、构树、Loader、Splitter、Milvus 写入及旧版本实体清理；构树会真实执行图片下载、MinIO 上传与模型识图，任一图片失败会使整篇文档记为失败，具体限制见 `document_index/AGENTS.md`。
 - 当前不存在 `tests/units/test_feishu_doc_index.py`，不要将它列为可执行检查或声称已有对应 Mock 覆盖。源码类型检查可用 `.venv/bin/pyright --pythonpath .venv/bin/python src/deal_pilot/graphs/feishu_doc_index`，执行结果需另行记录。
-- 本次指令同步仅核对源码、入口与路径，没有运行索引图或真实飞书、Nacos、Embedding、Milvus 联调。真实运行会写入并删除实体，应使用明确授权的数据范围；源码检查不能证明全库索引完成。
+- 已有一轮真实运行（2026-11-12）：18 个 Docx 节点中 11 篇无图文档写入成功（集合 `feishu_doc` 共 102 行），7 篇含图文档在图片下载处失败（飞书 `99991672`，缺 `docs:document.media:download`）。`adelete` 旧版本清理、版本未变跳过、部分写入失败均未触发，仍属未验证项；源码检查与单元测试不能证明全库索引完成。真实运行会写入并删除实体，应使用明确授权的数据范围。

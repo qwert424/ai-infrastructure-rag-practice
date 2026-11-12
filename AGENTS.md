@@ -15,11 +15,11 @@
 
 - 当前项目是 Python Agent 服务：以 LangGraph Server 提供运行入口，以 Deep Agents 组装 Agent，以 Nacos 管理 AgentSpec、Prompt、Skill、MCP 与沙箱配置。
 - Langfuse 用于追踪、离线评测和 Webhook；OpenSandbox 提供用户执行环境；MinIO 用于产物存储与交付；模型通过 OpenAI 兼容接口及自定义模型适配层调用。
-- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片；`rag/store/feishu_doc` 已实现 Milvus Schema、索引参数及显式调用的数据库/集合初始化和稠密索引重建。尚未实现文档向量化写入或检索，存储初始化未接入 Agent 或服务启动流程。
+- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索尚未实现；存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
 - 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。课件与 RAG 存储模块通过 PyMilvus 连接，不依赖 Milvus Lite。
-- `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；尚未接入 Agent 或 RAG 流程，本地 Mock 测试不代表真实租户验证。
+- `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；已被 `graphs/feishu_doc_index` 索引流程调用，尚未接入 Agent 主流程；本地 Mock 测试不代表真实租户验证。
 - 鉴权当前使用 `utils/mock_user.py` 中的模拟用户；告警 Webhook 已验签并接收事件，尚未实现短信或邮件通知。
-- `graphs` 保存手工构建的普通 LangGraph 图，不存放通过 LangChain 或 Deep Agents 创建的 Agent 图；当前包含可调度的清理图。调度计划由外部服务管理，代码中没有自动注册定时计划的逻辑。
+- `graphs` 保存手工构建的普通 LangGraph 图，不存放通过 LangChain 或 Deep Agents 创建的 Agent 图；当前包含清理图 `delete_old_trace` 与飞书文档索引图 `feishu_doc_index`（含单文档子图）。调度计划由外部服务管理，代码中没有自动注册定时计划的逻辑。
 
 ## 架构与目录导航
 
@@ -34,18 +34,18 @@
 | `src/deal_pilot/middlewares`              | Agent 执行阶段的状态处理                                                                                                                                                            |
 | `src/deal_pilot/utils`                    | 模型、追踪、缓存、存储、沙箱等公共能力                                                                                                                                              |
 | `src/deal_pilot/benchmarks`               | 数据集与实验；`evaluators` 子目录负责评分                                                                                                                                           |
-| `src/deal_pilot/graphs`                   | 手工构建的普通 LangGraph 图及其入口                                                                                                                                                 |
+| `src/deal_pilot/graphs`                   | 手工构建的普通 LangGraph 图及其入口；`feishu_doc_index` 负责知识库目录分批索引                                                                                                        |
 | `src/deal_pilot/feishu`                   | 官方 SDK 接入、知识空间/节点/Docx 读取、图片下载、分页与错误处理；Token 由 SDK 管理                                                                                                 |
-| `src/deal_pilot/rag/structure/feishu_doc` | 异步构树、原始关系校验、标题归组、内容及元数据提取；完整树构建后按文档顺序串行调用图片处理占位函数；提供 Data URL、私有图片上传及上下文辅助函数，尚未接入模型识图、切分、索引或检索 |
+| `src/deal_pilot/rag/structure/feishu_doc` | 异步构树、原始关系校验、标题归组、内容及元数据提取；完整树构建后按文档顺序串行调用图片处理（下载、私有桶上传、模型识图）；提供 Data URL、图片上下文辅助函数及树形字典往返               |
 | `src/deal_pilot/rag/loader/feishu_doc`    | 标准树到 LangChain Documents 的本地结构提取；父子占位引用、Markdown 正文、HTML 表格与合并校验，不按长度切片                                                                         |
 | `src/deal_pilot/rag/splitter/feishu_doc`  | 结构 Documents 的本地进一步切片；图片/代码整体保留，表格首行表头加单行，页面/章节按段落、句子和长度切分，保护占位符并保留目标 overlap                                               |
-| `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；尚无文档写入或检索流程 |
+| `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索尚未实现                     |
 | `tests/units`                             | 函数缓存、飞书 Mock、文档构树、Documents 结构提取及进一步切片单元测试                                                                                                               |
 | `tests/intergrations`                     | MinIO 与 Deploy 集成测试，保留现有目录拼写                                                                                                                                          |
 | `tests/benchmarks`                        | 依赖真实 Agent 和 Langfuse 的质量回归                                                                                                                                               |
 | `docker/sandbox/Dockerfile`               | 沙箱镜像，包含部署所需的上传工具                                                                                                                                                    |
 
-运行入口由 `langgraph.json` 定义：`main_agent` 指向追踪包装后的 Agent 工厂，`delete_old_trace` 指向清理图；鉴权入口是 `security.auth:auth`，自定义 HTTP 应用是 `app.main:app`。调整导出名称或模块路径时同步检查该文件。
+运行入口由 `langgraph.json` 定义：`main_agent` 指向追踪包装后的 Agent 工厂，`delete_old_trace` 指向清理图，`feishu_doc_index` 指向飞书文档索引图工厂；鉴权入口是 `security.auth:auth`，自定义 HTTP 应用是 `app.main:app`。调整导出名称或模块路径时同步检查该文件。
 
 ## 环境与常用命令
 

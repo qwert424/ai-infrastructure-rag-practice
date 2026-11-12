@@ -11,7 +11,7 @@ _store: Milvus | None = None
 _lock = asyncio.Lock()
 
 
-async def get_store():
+async def get_store() -> Milvus:
     global _store
 
     async with _lock:

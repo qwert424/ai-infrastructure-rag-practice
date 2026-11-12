@@ -54,6 +54,7 @@
 - 参数错误抛出 ValueError；缺少配置抛出 FeishuConfigurationError。
 - SDK 获取 Token 失败转为 FeishuAuthenticationError，保留 code，不输出 SDK 的原始服务端 msg。
 - 非零业务 code 抛出 FeishuAPIError，保留 code、http_status、log_id，不输出原始响应体或凭据。
+- 服务端 `msg` 可能回显请求内容（单元测试以伪敏感文本校验），因此不写入异常文本；排障按 code 对照开放平台，如 `99991672` 表示应用身份缺少接口权限，本仓库的图片下载需要 `docs:document.media:download`（或 `drive:drive` 等），开通后须重新发布应用版本。
 - get_space 的 131005、get_node 的 131005/131012、get_document 的 1770002/1770003，
   仅在 HTTP 200/400/404 时返回 None；其他错误不视为不存在。
 - 有效 SDK 响应的 HTTP 5xx，或 code=0 但 HTTP 非 2xx，抛出 FeishuHTTPError，保留状态和 log_id。
