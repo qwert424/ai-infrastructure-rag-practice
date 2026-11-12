@@ -10,7 +10,7 @@
 
 ## 初始化及重建
 
-- `init_store.py:await init_store() -> None` 读取 `get_config("rag_config", RagConfig)`，直接取 `store["feishu_doc"]`，使用 `milvus_settings.uri` 创建一个 `AsyncMilvusClient`。从默认数据库连接开始，目标 `db_name` 缺失则创建，再切换到目标数据库。
+- `init_store.py:await init_store() -> None` 读取 `get_config("rag_config", RagConfig)`，直接取 `milves_stores["feishu_doc"]`，使用 `milvus_settings.uri` 创建一个 `AsyncMilvusClient`。从默认数据库连接开始，目标 `db_name` 缺失则创建，再切换到目标数据库。
 - 集合名固定为 `feishu_doc`。缺失时用 `create_schema(rag_config.embedding_model.dimensions)` 创建集合，依次创建 dense、sparse 索引，再加载集合。
 - 已有集合只通过 `has_index_changed` 比较稠密索引；变化时调用 `drop_index`，重建稠密索引并重新加载。类型与度量未变时不做写操作，也不重新加载；不迁移 Schema/向量维度，不检查或补建稀疏索引，不比较构建参数。
 - `await has_index_changed(config, collection_name, index_name, *, client) -> bool` 使用调用方客户端；集合不存在或 `describe_index` 返回 `None` 时返回 True，否则直接比较返回字典的 `index_type`、`metric_type`。不展开或归一化参数；SDK 抛出的索引缺失等异常原样传播，不能据此保证所有索引缺失情况都能自动重建。

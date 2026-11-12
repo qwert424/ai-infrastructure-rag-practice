@@ -18,7 +18,7 @@ COLLECTION_NAME = "feishu_doc"
 async def init_store() -> None:
     """确保数据库和飞书集合存在，稠密索引类型或度量变化时重建。"""
     rag_config = await get_config("rag_config", RagConfig)
-    config = rag_config.store[COLLECTION_NAME]
+    config = rag_config.milves_stores[COLLECTION_NAME]
     client = AsyncMilvusClient(uri=milvus_settings.uri)
     try:
         if milvus_settings.db_name not in await client.list_databases():

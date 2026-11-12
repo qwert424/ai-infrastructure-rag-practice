@@ -66,7 +66,7 @@ type MilvusCollection = Literal["feishu_doc"]
 class RagConfig(BaseModel):
     image_parser: RagImageParser = Field(default_factory=RagImageParser)
     embedding_model: RagEmbeddingModel = Field(default_factory=RagEmbeddingModel)
-    store: dict[MilvusCollection, RagStoreConfig] = Field(
+    milves_stores: dict[MilvusCollection, RagStoreConfig] = Field(
         default_factory=lambda: {
             name: RagStoreConfig() for name in get_args(MilvusCollection.__value__)
         }
