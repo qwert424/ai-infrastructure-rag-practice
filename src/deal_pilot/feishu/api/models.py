@@ -5,6 +5,13 @@ from typing import Literal
 from pydantic import BaseModel, Field, JsonValue
 
 
+class DownloadedImage(BaseModel):
+    """下载的图片 MIME 类型及原始字节。"""
+
+    mime: str
+    data: bytes
+
+
 class WikiSpace(BaseModel):
     """知识空间基本信息。"""
 
@@ -26,7 +33,9 @@ class WikiNode(BaseModel):
         description="知识库节点访问地址，按 https://www.feishu.cn/wiki/{node_token} 拼接",
     )
     has_child: bool = Field(description="是否有子节点")
-    parent_node_token: str | None = Field(default=None, description="父节点；根节点为 None")
+    parent_node_token: str | None = Field(
+        default=None, description="父节点；根节点为 None"
+    )
 
 
 class DocxDocument(BaseModel):
@@ -43,7 +52,9 @@ class DocxBlock(BaseModel):
     block_id: str = Field(description="块 ID")
     block_type: int = Field(description="飞书定义的块类型编号")
     parent_id: str | None = Field(default=None, description="父块 ID；根块为 None")
-    children: list[str] = Field(default_factory=list, description="按原始顺序排列的子块 ID")
-    raw: dict[str, JsonValue] = Field(description="完整的原始块 JSON，保留富文本及未知字段")
-
-
+    children: list[str] = Field(
+        default_factory=list, description="按原始顺序排列的子块 ID"
+    )
+    raw: dict[str, JsonValue] = Field(
+        description="完整的原始块 JSON，保留富文本及未知字段"
+    )

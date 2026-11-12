@@ -1,6 +1,5 @@
 """将完整的飞书 DocxBlock 列表构建为按标题层级组织的有序树。"""
 
-import asyncio
 from copy import deepcopy
 
 from pydantic import JsonValue
@@ -10,7 +9,6 @@ from deal_pilot.rag.structure.feishu_doc import image_parser
 from deal_pilot.rag.structure.feishu_doc.block_node import BlockNode
 from deal_pilot.rag.structure.feishu_doc.block_type import BlockType
 from deal_pilot.rag.structure.feishu_doc.code_language import CodeLanguage
-
 
 _TEXT_FIELDS: dict[int, str] = {
     BlockType.PAGE: "page",
@@ -40,9 +38,9 @@ async def build_tree(blocks: list[DocxBlock]) -> BlockNode:
     merge_info（仅保留来源中存在的字段），其他节点为空字典。
     文本块 content 为按 elements 顺序提取的本节点纯文本；图片 content
     保存 image.token；无自身文本的容器等节点为空字符串。
-    完成整棵树后，只沿 children 遍历并收集全部图片节点，再并发调用
-    image_parser.parse_image_block；该函数原地更新节点，等待全部完成后
-    返回根节点。图片处理的异常及取消向调用方传播。
+    完成整棵树后，只沿 children 按文档顺序收集全部图片节点，再串行调用
+    image_parser.parse_image_block；该函数原地更新节点，等待当前图片完成
+    再处理下一张，全部完成后返回根节点。图片处理的异常及取消向调用方传播。
     不修改输入，也不拼接子节点内容；图片处理行为由 image_parser 决定。
 
     空输入、空/重复 ID、非唯一根、缺失块、父子关系冲突、重复挂载、环、
@@ -67,7 +65,9 @@ async def build_tree(blocks: list[DocxBlock]) -> BlockNode:
     # 自底向上挂载，每个原始子列表独立按标题层级组织。
     # 父节点此时尚未挂到祖先，避免扫描原始深树的整条祖先链。
     for block in reversed(ordered_blocks):
-        _append_sections(nodes[block.block_id], [nodes[child_id] for child_id in block.children])
+        _append_sections(
+            nodes[block.block_id], [nodes[child_id] for child_id in block.children]
+        )
     root = nodes[ordered_blocks[0].block_id]
     images: list[BlockNode] = []
     pending = [root]
@@ -76,8 +76,8 @@ async def build_tree(blocks: list[DocxBlock]) -> BlockNode:
         if node.block_type == BlockType.IMAGE:
             images.append(node)
         pending.extend(reversed(node.children))
-    if images:
-        await asyncio.gather(*(image_parser.parse_image_block(node) for node in images))
+    for node in images:
+        await image_parser.parse_image_block(node)
     return root
 
 
@@ -215,6 +215,8 @@ def _validate_tree(blocks: list[DocxBlock]) -> list[DocxBlock]:
     # 若还有不可达块，它们必在一个或多个与根断开的有环分量中。
     if len(ordered) != len(blocks):
         reached = {block.block_id for block in ordered}
-        unreachable_id = next(block.block_id for block in blocks if block.block_id not in reached)
+        unreachable_id = next(
+            block.block_id for block in blocks if block.block_id not in reached
+        )
         raise ValueError(f"存在环，块 {unreachable_id!r} 无法从根节点到达")
     return ordered

@@ -464,7 +464,7 @@ def test_image_root_is_processed_in_place(mock_image_parser: AsyncMock) -> None:
     assert root.payload == {"processed": True}
 
 
-def test_all_images_run_concurrently_after_complete_tree_is_built(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_all_images_run_serially_in_document_order(monkeypatch: pytest.MonkeyPatch) -> None:
     sources = [
         block("doc", children=["heading", "image-a", "table", "image-c", "tail"], block_type=1),
         block("heading", "doc", block_type=3),
@@ -478,9 +478,8 @@ def test_all_images_run_concurrently_after_complete_tree_is_built(monkeypatch: p
     before = [source.model_dump() for source in sources]
 
     async def scenario() -> None:
+        events: list[tuple[str, str]] = []
         started: dict[str, BlockNode] = {}
-        finished: set[str] = set()
-        all_started = asyncio.Event()
 
         async def parse(node: BlockNode) -> None:
             root = node
@@ -493,17 +492,22 @@ def test_all_images_run_concurrently_after_complete_tree_is_built(monkeypatch: p
             ]
             assert node.block_id not in started
             started[node.block_id] = node
-            if len(started) == 3:
-                all_started.set()
-            # 串行实现会停在这里；所有图片都开始处理后才允许任意一次结束。
-            await all_started.wait()
+            events.append(("start", node.block_id))
+            # 让出事件循环：并发实现会在第一张图片结束前插入下一次 start。
+            await asyncio.sleep(0)
             token = node.content
             node.content = f"processed-{node.block_id}"
             node.payload.update({"token": token, "processed": True})
-            finished.add(node.block_id)
+            events.append(("end", node.block_id))
 
         monkeypatch.setattr(image_parser, "parse_image_block", parse)
         root = await asyncio.wait_for(build_tree(sources), timeout=2)
+        assert events == [
+            (phase, f"image-{suffix}")
+            for suffix in "abc"
+            for phase in ("start", "end")
+        ]
+        finished = {node_id for phase, node_id in events if phase == "end"}
         assert set(started) == finished == {"image-a", "image-b", "image-c"}
         heading = root.children[0]
         images = [heading.children[0], heading.children[1].children[0].children[0], heading.children[2]]

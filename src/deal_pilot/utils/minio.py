@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import errno
 import ipaddress
 import json
@@ -33,7 +32,12 @@ def _extension(value: str) -> str:
 
 
 def _content_type(value: str) -> str:
-    if not isinstance(value, str) or not value.strip() or "\r" in value or "\n" in value:
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or "\r" in value
+        or "\n" in value
+    ):
         raise ValueError("Content-Type 必须是非空且不含换行的字符串")
     return value
 
@@ -74,24 +78,6 @@ def _expires(value: timedelta) -> int:
 
 def _error_code(exc: ClientError) -> str:
     return str(exc.response.get("Error", {}).get("Code", ""))
-
-
-def _env_flag(value: str | None) -> bool:
-    # 与 pydantic 的布尔解析保持一致，便于沙箱读取同名环境变量。
-    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
-
-
-class _ExistingClient:
-    """把已创建的客户端包装成异步上下文管理器，避免重复建连和关闭。"""
-
-    def __init__(self, client: Any) -> None:
-        self._client = client
-
-    async def __aenter__(self) -> Any:
-        return self._client
-
-    async def __aexit__(self, *exc_info: object) -> bool:
-        return False
 
 
 @dataclass
@@ -180,7 +166,7 @@ class MinIO:
         - 参数不合法抛出 ValueError；本地文件错误保留对应 OSError。
           服务端和网络错误原样向调用方传播，不转换为成功或空结果；
           upload_dir 的单文件错误例外，记录到汇总结果中。
-        - 默认每次操作独立创建并关闭客户端；用 async with 进入后复用同一客户端。
+        - 每次操作独立创建并关闭客户端，不持有跨事件循环的连接。
     """
 
     def __init__(
@@ -190,7 +176,6 @@ class MinIO:
         access_key: str,
         secret_key: str,
         secure: bool = True,
-        bucket: str | None = None,
         cache_strategy: list[CacheStrategy] | None = None,
         content_type_strategy: ContentTypeStrategy | None = None,
     ) -> None:
@@ -201,7 +186,6 @@ class MinIO:
             access_key: 非空访问密钥。
             secret_key: 非空秘密密钥。
             secure: True 使用 HTTPS，False 使用 HTTP。
-            bucket: 默认桶名；配置后各方法的 bucket_name 可以省略。
             cache_strategy: None 或空列表表示所有上传文件均 no-store。
                 未匹配的文件也使用 no-store；多个策略匹配时后者覆盖前者。
                 策略仅影响此客户端后续上传的对象，不修改已存在对象。
@@ -212,7 +196,11 @@ class MinIO:
         Raises:
             ValueError: 地址、密钥、缓存策略或 Content-Type 策略不合法。
         """
-        if not isinstance(endpoint, str) or not endpoint or any(c.isspace() for c in endpoint):
+        if (
+            not isinstance(endpoint, str)
+            or not endpoint
+            or any(c.isspace() for c in endpoint)
+        ):
             raise ValueError("endpoint 必须是不含协议的主机地址，可附带端口")
         try:
             parsed = urlsplit(f"//{endpoint}")
@@ -221,10 +209,17 @@ class MinIO:
         except ValueError as exc:
             raise ValueError("endpoint 地址或端口不合法") from exc
         if (
-            not host or parsed.path or parsed.query or parsed.fragment
-            or parsed.username is not None or parsed.password is not None
-            or "/" in endpoint or "?" in endpoint or "#" in endpoint
-            or endpoint.endswith(":") or (port is not None and port == 0)
+            not host
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or parsed.username is not None
+            or parsed.password is not None
+            or "/" in endpoint
+            or "?" in endpoint
+            or "#" in endpoint
+            or endpoint.endswith(":")
+            or (port is not None and port == 0)
         ):
             raise ValueError("endpoint 不得包含协议、路径、凭据或查询参数")
         if ":" in host:
@@ -237,7 +232,6 @@ class MinIO:
         for name, value in (("access_key", access_key), ("secret_key", secret_key)):
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} 不能为空")
-        self._bucket = _bucket(bucket) if bucket is not None else None
         if type(secure) is not bool:
             raise ValueError("secure 必须是布尔值")
         if cache_strategy is not None and not isinstance(cache_strategy, list):
@@ -256,61 +250,14 @@ class MinIO:
         content_type_strategy.__post_init__()
         self._default_content_type = content_type_strategy.default_content_type
         self._content_types = {
-            _extension(key): value for key, value in content_type_strategy.extensions.items()
+            _extension(key): value
+            for key, value in content_type_strategy.extensions.items()
         }
         self._endpoint_url = f"{'https' if secure else 'http'}://{endpoint}"
         self._access_key = access_key
         self._secret_key = secret_key
-        self._shared_client: Any | None = None
-        self._stack: contextlib.AsyncExitStack | None = None
 
-    @classmethod
-    def from_settings(cls, **overrides: Any) -> MinIO:
-        """用 MINIO_* 配置构造客户端；overrides 覆盖同名字段。
-
-        Agent 侧读取 `.env` 中的 minio_settings；沙箱等没有 deal_pilot 包的环境
-        退回读取同名环境变量，两处行为一致。
-        """
-        options = cls._settings_options()
-        options.update(overrides)
-        return cls(**options)
-
-    @staticmethod
-    def _settings_options() -> dict[str, Any]:
-        try:
-            from deal_pilot.config.minio_settings import minio_settings
-        except ImportError:
-            # 沙箱里只拷贝了本模块，没有 deal_pilot 包，改用环境变量。
-            return {
-                "endpoint": os.environ.get("MINIO_ENDPOINT") or "localhost:9002",
-                "access_key": os.environ.get("MINIO_ACCESS_KEY", ""),
-                "secret_key": os.environ.get("MINIO_SECRET_KEY", ""),
-                "secure": _env_flag(os.environ.get("MINIO_SECURE")),
-                "bucket": os.environ.get("MINIO_BUCKET") or None,
-            }
-        return {
-            "endpoint": minio_settings.endpoint,
-            "access_key": minio_settings.access_key,
-            "secret_key": minio_settings.secret_key,
-            "secure": minio_settings.secure,
-            "bucket": minio_settings.bucket or None,
-        }
-
-    async def __aenter__(self) -> MinIO:
-        """进入上下文后复用同一个客户端，避免每次操作重新建连。"""
-        stack = contextlib.AsyncExitStack()
-        self._shared_client = await stack.enter_async_context(self._create_client())
-        self._stack = stack
-        return self
-
-    async def __aexit__(self, *exc_info: object) -> bool:
-        stack, self._stack = self._stack, None
-        self._shared_client = None
-        if stack is None:
-            return False
-        return await stack.__aexit__(*exc_info)  # type: ignore[arg-type]
-
-    def _create_client(self) -> Any:
+    def _client(self) -> Any:
         # botocore 是 aiobotocore 自带的依赖，不引入额外的 SDK。
         return get_session().create_client(
             "s3",
@@ -321,42 +268,15 @@ class MinIO:
             config=AioConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
 
-    def _client(self) -> Any:
-        if self._shared_client is not None:
-            return _ExistingClient(self._shared_client)
-        return self._create_client()
-
-    def _resolve_bucket(self, bucket_name: str | None) -> str:
-        if bucket_name is None:
-            if self._bucket is None:
-                raise ValueError("未提供 bucket_name，且客户端未配置默认 bucket")
-            return self._bucket
-        return _bucket(bucket_name)
-
     def _metadata(self, filename: str) -> dict[str, str]:
         extension = PurePosixPath(filename.rsplit("/", 1)[-1]).suffix.lower()
         max_age = self._cache.get(extension, 0)
         return {
             "CacheControl": f"max-age={max_age}" if max_age else "no-store",
-            "ContentType": self._content_types.get(extension, self._default_content_type),
+            "ContentType": self._content_types.get(
+                extension, self._default_content_type
+            ),
         }
-
-    @staticmethod
-    def _spool(stream: BinaryIO, body: Any) -> None:
-        # 线程内读取并落盘，避免阻塞事件循环。
-        while True:
-            chunk = stream.read(_CHUNK_SIZE)
-            if not isinstance(chunk, bytes):
-                raise ValueError("stream.read() 必须返回 bytes")
-            if not chunk:
-                return
-            body.write(chunk)
-
-    @staticmethod
-    def _publish_new(temporary: str, target_file: str) -> None:
-        if os.path.lexists(target_file):
-            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), target_file)
-        os.replace(temporary, target_file)
 
     @staticmethod
     async def _bucket_exists(client: Any, bucket_name: str) -> bool:
@@ -369,7 +289,7 @@ class MinIO:
         return True
 
     async def create_bucket(
-        self, bucket_name: str | None = None, allow_public_read: bool = True
+        self, bucket_name: str, allow_public_read: bool = True
     ) -> None:
         """确保桶存在，并应用公共读约定。
 
@@ -382,7 +302,7 @@ class MinIO:
         建桶和设置策略不是原子操作；策略设置失败时桶可能已经创建，
         错误向调用方传播。重复调用不重复添加同一公共读策略。
         """
-        bucket_name = self._resolve_bucket(bucket_name)
+        bucket_name = _bucket(bucket_name)
         if type(allow_public_read) is not bool:
             raise ValueError("allow_public_read 必须是布尔值")
         async with self._client() as client:
@@ -410,25 +330,32 @@ class MinIO:
             for statement in statements:
                 if (
                     statement.get("Effect") == "Allow"
-                    and statement.get("Principal") in ("*", {"AWS": "*"}, {"AWS": ["*"]})
+                    and statement.get("Principal")
+                    in ("*", {"AWS": "*"}, {"AWS": ["*"]})
                     and statement.get("Action") in ("s3:GetObject", ["s3:GetObject"])
                     and statement.get("Resource") in (resource, [resource])
                     and not statement.get("Condition")
                 ):
                     return
-            statements.append({
-                "Effect": "Allow", "Principal": {"AWS": ["*"]},
-                "Action": ["s3:GetObject"], "Resource": [resource],
-            })
-            await client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
+            statements.append(
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [resource],
+                }
+            )
+            await client.put_bucket_policy(
+                Bucket=bucket_name, Policy=json.dumps(policy)
+            )
 
-    async def bucket_exists(self, bucket_name: str | None = None) -> bool:
+    async def bucket_exists(self, bucket_name: str) -> bool:
         """桶不存在时返回 False，存在时返回 True；权限和网络错误仍抛出。"""
-        bucket_name = self._resolve_bucket(bucket_name)
+        bucket_name = _bucket(bucket_name)
         async with self._client() as client:
             return await self._bucket_exists(client, bucket_name)
 
-    async def remove_bucket(self, bucket_name: str | None = None, force: bool = False) -> None:
+    async def remove_bucket(self, bucket_name: str, force: bool = False) -> None:
         """删除桶；桶不存在时忽略。
 
         Args:
@@ -441,7 +368,7 @@ class MinIO:
         权限不足、对象保留限制或并发写入等导致删除失败时，向调用方抛出错误；
         force 不绕过服务端权限或保留规则，也不将失败视为成功。
         """
-        bucket_name = self._resolve_bucket(bucket_name)
+        bucket_name = _bucket(bucket_name)
         if type(force) is not bool:
             raise ValueError("force 必须是布尔值")
         async with self._client() as client:
@@ -458,18 +385,30 @@ class MinIO:
                         for start in range(0, len(objects), 1000):
                             response = await client.delete_objects(
                                 Bucket=bucket_name,
-                                Delete={"Objects": objects[start:start + 1000], "Quiet": True},
+                                Delete={
+                                    "Objects": objects[start : start + 1000],
+                                    "Quiet": True,
+                                },
                             )
                             errors = response.get("Errors", [])
                             if errors:
                                 # 批量删除即使 HTTP 成功，仍可能存在逐对象错误。
-                                raise ClientError({
-                                    "Error": {
-                                        "Code": errors[0].get("Code", "DeleteFailed"),
-                                        "Message": json.dumps(errors, ensure_ascii=False),
+                                raise ClientError(
+                                    {
+                                        "Error": {
+                                            "Code": errors[0].get(
+                                                "Code", "DeleteFailed"
+                                            ),
+                                            "Message": json.dumps(
+                                                errors, ensure_ascii=False
+                                            ),
+                                        },
+                                        "ResponseMetadata": response.get(
+                                            "ResponseMetadata", {}
+                                        ),
                                     },
-                                    "ResponseMetadata": response.get("ResponseMetadata", {}),
-                                }, "DeleteObjects")
+                                    "DeleteObjects",
+                                )
                 await client.delete_bucket(Bucket=bucket_name)
             except ClientError as exc:
                 if _error_code(exc) != "NoSuchBucket":
@@ -478,7 +417,7 @@ class MinIO:
     async def write_file(
         self,
         *,
-        bucket_name: str | None = None,
+        bucket_name: str,
         filename: str,
         stream: BinaryIO,
     ) -> None:
@@ -490,24 +429,34 @@ class MinIO:
         调用方负责关闭流；不回到流起点、不关闭流，失败后不保证流位置。
         文本应先编码为字节。
         """
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         if not callable(getattr(stream, "read", None)):
             raise ValueError("stream 必须是可读取的二进制流")
         # 暂存为可重试的请求体，同时支持不可 seek 的流和非零起始位置。
         # 大于 8 MiB 时自动落到系统临时目录；从不关闭调用方的 stream。
-        # 代价是上传前完整读一遍流，大文件会有一次额外的磁盘读写。
-        with tempfile.SpooledTemporaryFile(max_size=8 * _CHUNK_SIZE, mode="w+b") as body:
-            await asyncio.to_thread(self._spool, stream, body)
+        with tempfile.SpooledTemporaryFile(
+            max_size=8 * _CHUNK_SIZE, mode="w+b"
+        ) as body:
+            while True:
+                chunk = stream.read(_CHUNK_SIZE)
+                if not isinstance(chunk, bytes):
+                    raise ValueError("stream.read() 必须返回 bytes")
+                if not chunk:
+                    break
+                body.write(chunk)
             body.seek(0)
             async with self._client() as client:
                 await client.put_object(
-                    Bucket=bucket_name, Key=filename, Body=body, **self._metadata(filename),
+                    Bucket=bucket_name,
+                    Key=filename,
+                    Body=body,
+                    **self._metadata(filename),
                 )
 
     async def upload_file(
         self,
         *,
-        bucket_name: str | None = None,
+        bucket_name: str,
         filename: str,
         source_file: str,
     ) -> None:
@@ -517,18 +466,45 @@ class MinIO:
         Content-Type 由构造器中的 content_type_strategy 按目标 filename 决定。
         本方法负责打开并关闭本地文件，不修改本地内容。
         """
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         source_file = self._local_path(source_file)
-        mode = (await asyncio.to_thread(os.stat, source_file)).st_mode
+        mode = os.stat(source_file).st_mode
         if stat.S_ISDIR(mode):
-            raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), source_file)
+            raise IsADirectoryError(
+                errno.EISDIR, os.strerror(errno.EISDIR), source_file
+            )
         if not stat.S_ISREG(mode):
             raise OSError(errno.EINVAL, "source_file 必须是普通文件", source_file)
         with open(source_file, "rb") as body:
             async with self._client() as client:
                 await client.put_object(
-                    Bucket=bucket_name, Key=filename, Body=body, **self._metadata(filename),
+                    Bucket=bucket_name,
+                    Key=filename,
+                    Body=body,
+                    **self._metadata(filename),
                 )
+
+    async def upload_bytes(
+        self,
+        *,
+        bucket_name: str,
+        filename: str,
+        data: bytes,
+        mime: str,
+    ) -> None:
+        """直接上传字节，覆盖、缓存、建桶及错误约定与 upload_file 相同。
+
+        空字节允许上传；Content-Type 使用显式 mime，覆盖后缀映射。
+        """
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
+        if not isinstance(data, bytes):
+            raise ValueError("data 必须是 bytes")
+        metadata = self._metadata(filename)
+        metadata["ContentType"] = _content_type(mime)
+        async with self._client() as client:
+            await client.put_object(
+                Bucket=bucket_name, Key=filename, Body=data, **metadata
+            )
 
     @staticmethod
     def _local_path(value: str) -> str:
@@ -544,7 +520,9 @@ class MinIO:
     def _scan_directory(source_dir: str) -> list[tuple[str, str]]:
         mode = os.stat(source_dir).st_mode
         if not stat.S_ISDIR(mode):
-            raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), source_dir)
+            raise NotADirectoryError(
+                errno.ENOTDIR, os.strerror(errno.ENOTDIR), source_dir
+            )
         files: list[tuple[str, str]] = []
         directories = [(source_dir, "")]
         while directories:
@@ -564,7 +542,7 @@ class MinIO:
     async def upload_dir(
         self,
         *,
-        bucket_name: str | None = None,
+        bucket_name: str,
         source_dir: str,
         prefix: str = "",
         max_concurrency: int = 10,
@@ -599,7 +577,7 @@ class MinIO:
         Returns:
             UploadDirResult：总数量、成功数量、失败数量及逐文件失败原因。
         """
-        bucket_name = self._resolve_bucket(bucket_name)
+        bucket_name = _bucket(bucket_name)
         source_dir = self._local_path(source_dir)
         prefix = _key(prefix, allow_empty=True).rstrip("/")
         if type(max_concurrency) is not int or max_concurrency <= 0:
@@ -613,7 +591,9 @@ class MinIO:
                 filename = f"{prefix}/{relative}" if prefix else relative
                 try:
                     await self.upload_file(
-                        bucket_name=bucket_name, filename=filename, source_file=local,
+                        bucket_name=bucket_name,
+                        filename=filename,
+                        source_file=local,
                     )
                 except Exception as exc:
                     failures[relative] = f"{type(exc).__name__}: {exc}"
@@ -623,17 +603,19 @@ class MinIO:
             for _ in range(min(max_concurrency, len(files))):
                 group.create_task(worker())
         return UploadDirResult(
-            total_count=len(files), success_count=len(files) - len(failures),
-            failure_count=len(failures), failures=dict(sorted(failures.items())),
+            total_count=len(files),
+            success_count=len(files) - len(failures),
+            failure_count=len(failures),
+            failures=dict(sorted(failures.items())),
         )
 
-    async def read_file(self, *, bucket_name: str | None = None, filename: str) -> bytes:
+    async def read_file(self, *, bucket_name: str, filename: str) -> bytes:
         """读取对象的全部内容为 bytes；空对象返回 b""。
 
         对象不存在时抛出服务端错误。返回前释放响应连接；
         全量读取会占用与对象大小相应的内存。
         """
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         async with self._client() as client:
             response = await client.get_object(Bucket=bucket_name, Key=filename)
             async with response["Body"] as body:
@@ -642,7 +624,7 @@ class MinIO:
     async def download_file(
         self,
         *,
-        bucket_name: str | None = None,
+        bucket_name: str,
         filename: str,
         target_file: str,
         overwrite: bool = False,
@@ -654,12 +636,14 @@ class MinIO:
         失败时保留原目标文件，清理本次下载的临时文件并抛出异常。
         目标为目录时抛出 IsADirectoryError。
         """
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         target_file = self._local_path(target_file)
         if type(overwrite) is not bool:
             raise ValueError("overwrite 必须是布尔值")
         if os.path.isdir(target_file):
-            raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), target_file)
+            raise IsADirectoryError(
+                errno.EISDIR, os.strerror(errno.EISDIR), target_file
+            )
         if not overwrite and os.path.lexists(target_file):
             raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), target_file)
         target_file = os.path.abspath(target_file)
@@ -668,33 +652,28 @@ class MinIO:
         temporary: str | None = None
         try:
             # 临时文件和目标在同一目录，完整下载后原子发布。
-            with tempfile.NamedTemporaryFile(mode="wb", dir=parent, delete=False) as output:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=parent, delete=False
+            ) as output:
                 temporary = output.name
                 async with self._client() as client:
                     response = await client.get_object(Bucket=bucket_name, Key=filename)
                     async with response["Body"] as body:
                         while chunk := await body.read(_CHUNK_SIZE):
-                            await asyncio.to_thread(output.write, chunk)
+                            output.write(chunk)
             if overwrite:
-                await asyncio.to_thread(os.replace, temporary, target_file)
+                os.replace(temporary, target_file)
                 temporary = None
             else:
                 # link 的独占创建语义同时处理下载期间目标被其他进程创建的情况。
-                try:
-                    await asyncio.to_thread(os.link, temporary, target_file)
-                except FileExistsError:
-                    raise
-                except OSError:
-                    # 不支持硬链接的文件系统退化为存在性检查 + 原子替换。
-                    await asyncio.to_thread(self._publish_new, temporary, target_file)
-                    temporary = None
+                os.link(temporary, target_file)
         finally:
             if temporary is not None:
-                await asyncio.to_thread(os.unlink, temporary)
+                os.unlink(temporary)
 
-    async def file_exists(self, *, bucket_name: str | None = None, filename: str) -> bool:
+    async def file_exists(self, *, bucket_name: str, filename: str) -> bool:
         """对象不存在时返回 False；桶不存在、权限或网络错误仍抛出。"""
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         async with self._client() as client:
             try:
                 await client.head_object(Bucket=bucket_name, Key=filename)
@@ -709,7 +688,7 @@ class MinIO:
                 raise
             return True
 
-    async def list_files(self, bucket_name: str | None = None, prefix: str = "") -> list[str]:
+    async def list_files(self, bucket_name: str, prefix: str = "") -> list[str]:
         """返回匹配前缀的全部对象键，按对象键升序排列。
 
         prefix 允许为空，开头的 / 会被移除，采用字符串前缀匹配。
@@ -717,7 +696,7 @@ class MinIO:
         仅列举当前可见对象，不列举历史版本或删除标记。
         桶不存在时抛出服务端错误。
         """
-        bucket_name = self._resolve_bucket(bucket_name)
+        bucket_name = _bucket(bucket_name)
         prefix = _key(prefix, allow_empty=True)
         async with self._client() as client:
             paginator = client.get_paginator("list_objects_v2")
@@ -726,12 +705,12 @@ class MinIO:
                 files.extend(item["Key"] for item in page.get("Contents", []))
             return sorted(files)
 
-    async def remove_file(self, *, bucket_name: str | None = None, filename: str) -> None:
+    async def remove_file(self, *, bucket_name: str, filename: str) -> None:
         """删除指定对象；对象不存在时忽略，桶不存在时抛出服务端错误。
 
         开启版本控制时遵循服务端默认删除语义，不清除历史版本。
         """
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         async with self._client() as client:
             try:
                 await client.delete_object(Bucket=bucket_name, Key=filename)
@@ -739,20 +718,19 @@ class MinIO:
                 if _error_code(exc) != "NoSuchKey":
                     raise
 
-    def get_file_url(self, *, bucket_name: str | None = None, filename: str) -> str:
+    def get_file_url(self, *, bucket_name: str, filename: str) -> str:
         """返回未签名的永久对象 URL，对对象键进行 URL 编码并保留 /。
 
         根据 secure 选择协议，不发起网络请求、不检查对象是否存在。
-        URL 不授予权限；匿名访问需要桶策略允许公共读，
-        在当前最小权限配置下匿名 GET 会返回 403，需要可分享链接时用预签名 URL。
+        URL 不授予权限；匿名访问需要桶策略允许公共读。
         """
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         return f"{self._endpoint_url}/{quote(bucket_name, safe='')}/{quote(filename, safe='/')}"
 
     async def presigned_get_file_url(
         self,
         *,
-        bucket_name: str | None = None,
+        bucket_name: str,
         filename: str,
         expires: timedelta = timedelta(hours=1),
     ) -> str:
@@ -767,7 +745,7 @@ class MinIO:
     async def presigned_put_file_url(
         self,
         *,
-        bucket_name: str | None = None,
+        bucket_name: str,
         filename: str,
         expires: timedelta = timedelta(hours=1),
     ) -> str:
@@ -786,11 +764,17 @@ class MinIO:
         return await self._presigned_url("put_object", bucket_name, filename, expires)
 
     async def _presigned_url(
-        self, operation: str, bucket_name: str | None, filename: str, expires: timedelta,
+        self,
+        operation: str,
+        bucket_name: str,
+        filename: str,
+        expires: timedelta,
     ) -> str:
-        bucket_name, filename = self._resolve_bucket(bucket_name), _key(filename)
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
         seconds = _expires(expires)
         async with self._client() as client:
             return await client.generate_presigned_url(
-                operation, Params={"Bucket": bucket_name, "Key": filename}, ExpiresIn=seconds,
+                operation,
+                Params={"Bucket": bucket_name, "Key": filename},
+                ExpiresIn=seconds,
             )
