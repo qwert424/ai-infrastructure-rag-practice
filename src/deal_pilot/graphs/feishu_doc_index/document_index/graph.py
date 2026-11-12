@@ -1,4 +1,4 @@
-"""单文档索引子图，按课件流程依次连接节点。"""
+"""单文档索引子图，按处理流程依次连接节点。"""
 
 from langgraph.graph import END, START, StateGraph
 

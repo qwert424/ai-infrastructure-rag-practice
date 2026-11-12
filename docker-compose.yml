@@ -274,7 +274,7 @@ services:
       start_period: 1s
 
   # Milvus Standalone（v3.0.2）：专用 etcd / MinIO，不复用 Shared MinIO，
-  # 也不加载其他练习留下的 milvus_data。仅供课件通过 PyMilvus 连接，未开启身份认证。
+  # 也不加载其他项目留下的 milvus_data。仅供 RAG 模块通过 PyMilvus 连接，未开启身份认证。
   milvus:
     image: milvusdb/milvus:v3.0.2
     restart: unless-stopped
@@ -349,6 +349,48 @@ services:
       timeout: 5s
       retries: 12
 
+  # Neo4j 企业版（含 Bloom）：本地图数据实验用，只监听宿主回环地址。
+  # 放在 neo4j profile 下，普通 `docker compose up` 不会自动启动，需要显式指定服务名或 --profile neo4j。
+  # 启动前在 .env 里配置许可协议与初始密码；Bloom 许可证目录可选（默认 docker/neo4j）。
+  neo4j:
+    profiles: ["neo4j"]
+    image: neo4j:2026.10.1-enterprise
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7474:7474" # Neo4j Browser 和 Bloom
+      - "127.0.0.1:7687:7687" # Bolt
+    environment:
+      # 未填写时 Neo4j 会拒绝启动并提示接受许可协议，不会静默以无许可状态运行
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: ${NEO4J_ACCEPT_LICENSE_AGREEMENT:-}
+      # 密码为空时容器直接报 "neo4j/ is invalid"，不会启动成免密实例
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-}
+      NEO4J_PLUGINS: '["bloom"]'
+      NEO4J_dbms_bloom_license__file: /licenses/bloom.license
+      NEO4J_dbms_security_procedures_unrestricted: "bloom.*"
+      NEO4J_server_unmanaged__extension__classes: "com.neo4j.bloom.server=/bloom"
+      NEO4J_dbms_security_http__auth__allowlist: "/,/browser.*,/bloom.*"
+    volumes:
+      - neo4j_data:/data
+      # Bloom 许可证目录默认是 docker/neo4j（已 gitignore，可放 bloom.license）；
+      # 挂目录而不是挂文件，缺少许可证时数据库仍能启动，只是 bloom.* 过程不会注册。
+      - type: bind
+        source: ${BLOOM_LICENSE_DIR:-./docker/neo4j}
+        target: /licenses
+        read_only: true
+        bind:
+          create_host_path: true
+    healthcheck:
+      # 只验证 Bolt 可查询；Bloom 是否可用取决于 /licenses/bloom.license
+      test:
+        - CMD-SHELL
+        - >-
+          cypher-shell -a bolt://localhost:7687 -u neo4j -p "$${NEO4J_AUTH#neo4j/}"
+          --format plain "RETURN 1 AS ok" > /dev/null
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
 # 数据卷复用旧项目 deal-pilot 已经在用的那套（Langfuse 项目/密钥、Nacos 配置、LiteLLM 模型、
 # MinIO 桶与凭证都在里面），因此换项目名启动新容器后不需要重新配置任何东西。
 # 两个项目共用同一批数据卷，同一时间只能启动其中一个（端口也是同一套）。
@@ -387,10 +429,13 @@ volumes:
     name: deal-pilot_shared_minio_data
     external: true
   # Milvus 专用卷：显式命名（不带项目前缀），确保是全新卷，
-  # 不会误加载其他练习或旧项目遗留的 milvus 数据。
+  # 不会误加载其他项目或旧项目遗留的 milvus 数据。
   milvus_standalone_data:
     name: milvus_standalone_data
   milvus_standalone_etcd_data:
     name: milvus_standalone_etcd_data
   milvus_standalone_minio_data:
     name: milvus_standalone_minio_data
+  # Neo4j 数据卷同样显式命名，避免误加载其他项目或旧项目的图数据
+  neo4j_data:
+    name: neo4j_data

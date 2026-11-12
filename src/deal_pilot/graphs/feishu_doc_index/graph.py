@@ -30,9 +30,13 @@ async def factory() -> CompiledStateGraph[FeishuDocIndexState, FeishuDocIndexCon
             concurrency = runtime.context["concurrency"]
 
         nodes: list[WikiNode] = []  # 该批次待处理的node
-        for _ in range(concurrency):
+        # 取满 concurrency 个 Docx 或目录遍历结束才停止；非 Docx 节点不占批次名额，
+        # 避免混合类型目录里前半段非 Docx 节点把本批填满而提前结束。
+        while len(nodes) < concurrency:
             node = await anext(node_iter, None)
-            if node is not None and node.obj_type == "docx":
+            if node is None:
+                break
+            if node.obj_type == "docx":
                 nodes.append(node)
         node_count = len(nodes)
         if node_count == 0:

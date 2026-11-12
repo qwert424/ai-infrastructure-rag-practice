@@ -66,7 +66,7 @@ async def main():
         content_type_strategy=ContentTypeStrategy(extensions=types),
     )
     bucket = config["bucket_name"]
-    # 与直传课件一致：确保桶存在，并允许匿名读取交付产物。
+    # 与单文件直传保持一致：确保桶存在，并允许匿名读取交付产物。
     await client.create_bucket(bucket, allow_public_read=True)
     if source.is_dir():
         # 目录部署采用整体替换：先清空目标目录，再上传新产物。

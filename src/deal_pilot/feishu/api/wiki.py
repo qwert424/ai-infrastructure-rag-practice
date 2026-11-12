@@ -138,14 +138,13 @@ class WikiAPI:
             )
         ]
 
-    async def _iter_nodes(
+    async def _iter_node_items(
         self,
         space_id: str,
         *,
         parent_node_token: str | None = None,
-        space_name: str | None = None,
-    ) -> AsyncIterator[WikiNode]:
-        """按需读取直接子节点分页，不递归或预取；space_name 仅用于填充节点。"""
+    ) -> AsyncIterator[dict[str, JsonValue]]:
+        """按需读取直接子节点分页，不递归或预取；返回原始 item 供调用方解析。"""
         space_id = resource_id(space_id, "space_id")
         if parent_node_token is not None:
             resource_id(parent_node_token, "parent_node_token")
@@ -161,17 +160,30 @@ class WikiAPI:
             return await sdk_call(lambda: api.space_node.list(request))
 
         async for item in iter_items(fetch_page):
+            yield item
+
+    async def _iter_nodes(
+        self,
+        space_id: str,
+        *,
+        parent_node_token: str | None = None,
+        space_name: str | None = None,
+    ) -> AsyncIterator[WikiNode]:
+        """按需读取直接子节点分页，不递归或预取；space_name 仅用于填充节点。"""
+        async for item in self._iter_node_items(
+            space_id, parent_node_token=parent_node_token
+        ):
             yield _wiki_node(item, space_name=space_name)
 
     async def list_all_space_nodes(self) -> AsyncIterator[WikiNode]:
-        """按需迭代所有可访问知识空间中、全部层级的节点。
+        """按需迭代所有可访问知识空间中、全部层级的 Docx 节点。
 
         使用 async for 消费；开始迭代才请求网络，空间及目录分页均按需读取，
         不预取下一页或目录。请求随消费推进，但不提供固定请求速率限制。
         任一后续请求失败时向消费方抛出异常，已产出的节点不会撤回。
 
         Yields:
-            根目录节点及全部后代节点，按空间和目录广度优先顺序产出。
+            根目录节点及全部后代中 obj_type 为 docx 的节点，按空间和目录广度优先顺序产出。
             每项通过 space_id 标识所属空间，space_name 由所属空间名称填充，
             因此无需再调用 get_space；同一 (space_id, node_token) 只产出一次，
             指向相同 obj_token 的不同节点仍分别保留。没有节点时直接结束。
@@ -183,15 +195,22 @@ class WikiAPI:
             parents: deque[str | None] = deque([None])
             while parents:
                 parent = parents.popleft()
-                async for node in self._iter_nodes(
-                    space.space_id,
-                    parent_node_token=parent,
-                    space_name=space.name,
+                async for item in self._iter_node_items(
+                    space.space_id, parent_node_token=parent
                 ):
-                    key = (node.space_id, node.node_token)
+                    token = item.get("node_token")
+                    if not isinstance(token, str) or not token:
+                        raise FeishuResponseError("飞书节点响应缺少有效的 node_token")
+                    key = (space.space_id, token)
                     if key in seen:
                         continue
                     seen.add(key)
+                    if item.get("obj_type") != "docx":
+                        # 其他类型不产出，但仍遍历其子节点，避免混合类型目录后段整体丢失。
+                        if item.get("has_child") is True:
+                            parents.append(token)
+                        continue
+                    node = _wiki_node(item, space_name=space.name)
                     if node.has_child:
-                        parents.append(node.node_token)
+                        parents.append(token)
                     yield node

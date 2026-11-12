@@ -10,10 +10,14 @@ else
 INTEGRATION_ENV = MINIO_INTEGRATION=1 DEPLOY_INTEGRATION=1 DEPLOY_SANDBOX_IMAGE=$(DEPLOY_SANDBOX_IMAGE)
 endif
 
-.PHONY: docker-recreate build dev debug test-benchmark test-units test-integrations test-agent-token
+.PHONY: docker-recreate build dev debug test-benchmark test-units test-integrations test-agent-token neo4j
 
 docker-recreate:
 	docker compose up -d --force-recreate
+
+# Neo4j 在 neo4j profile 下，普通 up 不会启动，这里显式拉起
+neo4j:
+	docker compose up -d --wait neo4j
 
 build:
 	uv run langgraph build -t langgraph-python-agent:$(TAG)

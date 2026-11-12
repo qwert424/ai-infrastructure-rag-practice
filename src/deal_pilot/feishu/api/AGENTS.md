@@ -27,12 +27,12 @@
 
 - list_spaces 返回所有可访问空间；list_nodes 返回全部直接子节点，不递归；分页大小均为 50。
   parent_node_token=None 表示空间根目录，不接受空 token。两者内部由私有异步生成器逐页读取，对外仍返回完整列表。
-- list_all_space_nodes 返回 `AsyncIterator[WikiNode]`，按空间和目录广度遍历并按需读取分页：开始消费才发起网络请求，不预取下一页或目录；按 `(space_id, node_token)` 去重，
+- list_all_space_nodes 返回 `AsyncIterator[WikiNode]`，只产出 obj_type 为 docx 的节点，按空间和目录广度遍历并按需读取分页：开始消费才发起网络请求，不预取下一页或目录；按 `(space_id, node_token)` 去重，
   指向相同 obj_token 的不同节点仍保留；不读取正文，不保证跨请求的数据快照一致。后续请求失败向消费方抛出异常，已产出节点不撤回，也不代表空结果。
   该路径用所属空间名称填充 `WikiNode.space_name`，消费方可直接使用，无需再调用 get_space。
 - `WikiNode.space_name` 为可选字段：只有 list_all_space_nodes 填充；list_nodes、get_node 及直接构造的节点为 None，需要空间名称时须自行 get_space 回退。
-- WikiNode.obj_type 仍为 Literal["docx"]；其他类型抛出 UnsupportedWikiNodeTypeError，
-  不转换、不静默过滤；混合类型空间的全量遍历会失败。
+- WikiNode.obj_type 仍为 Literal["docx"]：`get_node` 与 `list_nodes` 遇到其他类型抛 UnsupportedWikiNodeTypeError，不转换、不静默过滤；
+  `list_all_space_nodes` 跳过其他类型节点本身，但仍读取其子节点，混合类型空间的 Docx 可完整遍历，非 Docx 不计入产出。
 - 节点 URL 按 `https://www.feishu.cn/wiki/{node_token}` 生成，不使用 obj_token 或服务返回 URL；
   根节点的空 parent_node_token 规范化为 None。
 - get_document 读取元信息；list_blocks 读取全部块，分页大小为 500。

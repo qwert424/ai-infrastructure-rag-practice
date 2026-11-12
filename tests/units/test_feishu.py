@@ -392,7 +392,7 @@ def test_all_nodes_propagates_later_node_page_failure(mock_feishu, failure):
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("operation", ["get", "list", "all"])
+@pytest.mark.parametrize("operation", ["get", "list"])
 def test_unsupported_node_type_is_explicit_error(mock_feishu, operation):
     def handler(request):
         if request.url.path.endswith("/spaces"):
@@ -404,10 +404,32 @@ def test_unsupported_node_type_is_explicit_error(mock_feishu, operation):
     mock_feishu(handler)
     method = {
         "get": lambda: WikiAPI().get_node("n1"), "list": lambda: WikiAPI().list_nodes("s1"),
-        "all": collect_all_nodes,
     }[operation]
     with pytest.raises(UnsupportedWikiNodeTypeError):
         asyncio.run(method())
+
+
+def test_full_space_traversal_skips_unsupported_nodes_but_keeps_their_children(mock_feishu):
+    def handler(request):
+        if request.url.path.endswith("/spaces"):
+            return page([{"space_id": "s1", "name": "产品"}])
+        parent = request.url.params.get("parent_node_token")
+        if parent is None:
+            return page([node("sheet", obj_type="sheet", has_child=True), node("doc1")])
+        if parent == "sheet":
+            return page([
+                node("child", parent="sheet"),
+                node("bitable", parent="sheet", has_child=True, obj_type="bitable"),
+            ])
+        assert parent == "bitable"
+        return page([])
+
+    requests, _ = mock_feishu(handler)
+    entries = asyncio.run(collect_all_nodes())
+    assert [n.node_token for n in entries] == ["doc1", "child"]
+    assert all(n.space_name == "产品" for n in entries)
+    # 非 Docx 节点本身不产出，但它的子目录仍会被读取
+    assert len(requests) == 5
 
 
 @pytest.mark.parametrize("revision", [-1, 7])

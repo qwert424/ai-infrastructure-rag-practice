@@ -5,7 +5,7 @@
 - `graph.py` 使用 StateGraph(DocumentIndexState) 注册节点、版本条件路由及顺序边，导出编译后的 graph，不单独指定输入、输出 Schema；主图以 `{"node": WikiNode}` 调用。
 - `state.py` 只定义 DocumentIndexState，包含 node、document、indexed_revision_id、needs_index、metadata、blocks、root、documents、chunks、written_chunk_count 和 status；不依赖父图状态或保存统计增量。
 - root 使用 BlockNodeDict，只保存内容与 children；结构化节点在 build_tree 后调用 to_dict，Loader 前用 BlockNode.from_dict 重建引用，再调用 `load_feishu_doc_structre`。
-- `nodes.py` 的全部业务节点已有函数体；`resource/feishu_doc_index/document_index` 中同名节点仍是教学占位，两者不能混为一谈。
+- `nodes.py` 的全部业务节点已有函数体，导出后由 `graph.py` 按顺序连接。
 
 ## 流程与实际行为
 

@@ -16,7 +16,8 @@
 - 当前项目是 Python Agent 服务：以 LangGraph Server 提供运行入口，以 Deep Agents 组装 Agent，以 Nacos 管理 AgentSpec、Prompt、Skill、MCP 与沙箱配置。
 - Langfuse 用于追踪、离线评测和 Webhook；OpenSandbox 提供用户执行环境；MinIO 用于产物存储与交付；模型通过 OpenAI 兼容接口及自定义模型适配层调用。
 - 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索由 `rag/retriever/feishu_doc` 的 `search()` 提供（双路召回加重排），既由独立图 `retrieve_agent` 的 `before_agent` 中间件在每轮开始前调用、把结果作为消息注入，也注册为工具 `milvus_search`；`milvus_query` 按标量表达式读取切片。两者都未接入 `main_agent` 的中间件。存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
-- 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。课件与 RAG 存储模块通过 PyMilvus 连接，不依赖 Milvus Lite。Milvus 的文本重排凭据放在本地 `docker/milvus/user.yaml`（已 gitignore，按 `user.yaml.example` 创建），只读挂载到容器 `/milvus/configs/user.yaml`；该文件含 API Key，不得入库或写进文档。
+- 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。RAG 存储与检索模块通过 PyMilvus 连接，不依赖 Milvus Lite。Milvus 的文本重排凭据放在本地 `docker/milvus/user.yaml`（已 gitignore，按 `user.yaml.example` 创建），只读挂载到容器 `/milvus/configs/user.yaml`；该文件含 API Key，不得入库或写进文档。
+- 本地 Compose 另提供 Neo4j Enterprise `2026.10.1-enterprise`（`neo4j` 服务，含 Bloom 插件），7474/7687 只监听宿主回环地址，数据卷为显式命名的 `neo4j_data`。该服务属于 `neo4j` profile，`make docker-recreate` 与普通 `docker compose up` 都不会启动，用 `make neo4j` 或 `docker compose up -d --wait neo4j` 单独拉起。启动依赖 `.env` 的 `NEO4J_ACCEPT_LICENSE_AGREEMENT=yes` 与 `NEO4J_PASSWORD`（至少 8 字符）；Bloom 许可证目录由 `BLOOM_LICENSE_DIR` 指定（默认 `docker/neo4j`，其下 `bloom.license` 已 gitignore），目录以只读方式挂到容器 `/licenses`。健康检查只验证 Bolt 可查询，因此没有 Bloom 许可证时数据库仍可启动，只是 `bloom.*` 过程不会注册；缺少许可协议或密码时只有该容器起不来，不影响其他服务。应用代码尚未接入图数据库，也没有新增驱动依赖。
 - `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；已被 `graphs/feishu_doc_index` 索引流程调用，尚未接入 Agent 主流程；本地 Mock 测试不代表真实租户验证。
 - IM 消息事件由 `event` 注册回调、`feishu/event` 建立长连接与分发，`app` 的 lifespan 在启动时开启；当前按发送者 open_id 签发 Agent 令牌，经 `utils/run_agent` 调用 Agent Server 运行 `main_agent`，用状态卡片（CardKit）按固定间隔更新状态与正文后发到原 `chat_id`，按 `message_id` 进程内幂等，未接入 RAG 索引与会话持久化。`FEISHU_EVENTS_ENABLED=false` 可关闭监听，启动失败只记录日志不阻断服务。
 - 鉴权使用 `security/agent_token.py` 的 HS256 令牌：Feishu 业务入口按发送者 OpenID 签发短期令牌，Agent Server 校验后返回 identity；`AGENT_TOKEN_SECRET` 至少 32 字节且两端一致。告警 Webhook 已验签并接收事件，尚未实现短信或邮件通知。
@@ -43,7 +44,7 @@
 | `src/deal_pilot/rag/splitter/feishu_doc`  | 结构 Documents 的本地进一步切片；图片/代码整体保留，表格首行表头加单行，页面/章节按段落、句子和长度切分，保护占位符并保留目标 overlap                                               |
 | `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化、可空字段与长度扩容的原地 Schema 同步、`space_title` 回填及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索经 `rag/retriever/feishu_doc` 使用该实例 |
 | `src/deal_pilot/rag/retriever/feishu_doc` | 双路召回与重排的 `search()`：按 `RetrieverConfig` 传入 `fetch_k`、`k`、两路 `param` 与 rrf/weighted/模型重排，返回带分数的 `SearchResult`；模型重排由 Milvus 侧调用 LiteLLM `/v1/rerank` |
-| `tests/units`                             | 函数缓存、飞书读取/消息回调/卡片 Mock、Agent 令牌与流式适配、文档构树与切片、Milvus Schema 同步、Nacos `rag_config` 示例校验及 Benchmark 报告阈值判定单元测试                          |
+| `tests/units`                             | 函数缓存、飞书读取/消息回调/卡片 Mock、Agent 令牌与流式适配、飞书索引主图取批、文档构树与切片、Milvus Schema 同步、Nacos `rag_config` 示例校验及 Benchmark 报告阈值判定单元测试                          |
 | `tests/intergrations`                     | MinIO、Deploy 与 Milvus Schema 同步集成测试，保留现有目录拼写                                                                                                                       |
 | `tests/benchmarks`                        | 依赖真实 Agent 和 Langfuse 的质量回归                                                                                                                                               |
 | `docker/sandbox/Dockerfile`               | 沙箱镜像，包含部署所需的上传工具                                                                                                                                                    |
@@ -60,6 +61,7 @@
 | `make dev`                                                                                                                         | 启动 LangGraph 开发服务，端口 80；按配置依赖外部服务                                    |
 | `make debug`                                                                                                                       | 开发服务另开调试端口 5678                                                               |
 | `docker compose up -d --wait milvus`                                                                                               | 仅启动 Milvus Standalone 及其专用 etcd、MinIO，并等待健康检查                           |
+| `make neo4j`                                                                                                                       | 单独启动 Neo4j（含 Bloom）并等待健康检查；需要 `.env` 的许可协议与初始密码，Bloom 另需许可证文件 |
 | `make build TAG=<镜像标签>`                                                                                                        | 构建 Agent 服务镜像                                                                     |
 | `make test-units`                                                                                                                  | 全部 `tests/units` 单元测试，无需启动外部服务                                                                        |
 | `make test-agent-token`                                                                                                            | 用本地 `AGENT_TOKEN_SECRET` 签发一个测试令牌并打印，仅用于本地调试鉴权                                                 |
@@ -83,11 +85,6 @@ Milvus SDK 端口为 `127.0.0.1:19530`，健康检查及 WebUI 为 `127.0.0.1:90
 - 按改动选择验证：纯文档检查路径、命令与事实；缓存改动运行单元测试；存储和部署改动运行对应集成测试；Agent 行为改动按场景评测。不要对所有改动默认执行整个测试目录。
 - 缺少外部服务时报告未验证项。区分源码检查、本地测试、Mock 和真实服务验证；测试跳过不等于验证通过。
 - 模块接口、入口、环境变量、资源路径或行为契约变化时，同步检查相关调用方、测试和指令文件。
-
-## 课件配图要求
-
-- 课件图片默认不加标题，以图形、嵌套、连线、箭头、位置和颜色直观表达概念关系或流程，让图片本身承担解释作用。
-- 不在图片中堆叠文字说明；必须使用文字时，仅保留少量必要的概念名、标签或简短示例，不用大段文字代替图形表达。
 
 ## 保持的设计约束
 
