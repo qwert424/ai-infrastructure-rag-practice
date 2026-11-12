@@ -21,7 +21,7 @@
 - 模型创建使用 `AgentModelConfig` 和自定义 provider `openai_reasoning`；有 thread_id 时设置 `x-litellm-session-id`，保持同一会话路由标识。
 - `utils/__init__.py` 导入 ReasoningChatModel 触发 provider 注册。这依赖 LangChain 的内部集成表，升级依赖时检查兼容性，不能无意移除导入。
 - reasoning 适配同时处理流式与非流式，输出 v1 content blocks；保留正文、工具调用和响应元数据，不把 reasoning 当最终用户答案。
-- 追踪包装从 metadata 读取父 trace/span，从认证 runtime 读取用户，从上下文读取会话；只在 trace_id 和 parent_span_id 同时存在时建立父关联。
+- 追踪包装从 metadata 读取父 trace/span，从认证 runtime 读取用户，从上下文读取会话；只在 trace_id 和 parent_span_id 同时存在时建立父关联。环境取值优先使用 `trace_wrapper(factory, enviroment=...)` 的显式参数（参数名保留该拼写），未提供时回退 metadata 的 `trace_environment`；只有取到非空值才用 `propagate_attributes(environment=...)` 包裹执行。
 
 ## 缓存契约
 

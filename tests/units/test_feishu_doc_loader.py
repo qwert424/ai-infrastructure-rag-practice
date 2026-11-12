@@ -17,7 +17,7 @@ from deal_pilot.rag.structure.feishu_doc.code_language import CodeLanguage
 
 FIELDS = {
     "block_id", "block_type", "kind", "payload", "order",
-    "parent_document_id", "title_path", "references",
+    "parent_block_id", "title_path", "references",
 }
 
 
@@ -63,13 +63,13 @@ def assert_references(documents: list[Document]) -> None:
         for ref in refs:
             assert set(ref) == {"id", "kind", "placeholder"}
             target = by_id[ref["id"]]
-            assert target.metadata["parent_document_id"] == doc.id
+            assert target.metadata["parent_block_id"] == doc.id
             assert target.metadata["kind"] == ref["kind"]
             assert doc.page_content.count(ref["placeholder"]) == 1
             positions.append(doc.page_content.index(ref["placeholder"]))
         assert positions == sorted(positions)
-        if doc.metadata["parent_document_id"] is not None:
-            parent = by_id[doc.metadata["parent_document_id"]]
+        if doc.metadata["parent_block_id"] is not None:
+            parent = by_id[doc.metadata["parent_block_id"]]
             assert sum(ref["id"] == doc.id for ref in parent.metadata["references"]) == 1
 
 
@@ -85,7 +85,7 @@ def test_preorder_ownership_titles_and_no_body_duplication() -> None:
     )
     documents = load_feishu_doc_structre(root)
     assert [doc.id for doc in documents] == ["page", "h1", "image", "h2", "h3"]
-    assert [doc.metadata["parent_document_id"] for doc in documents] == [None, "page", "h1", "h1", "page"]
+    assert [doc.metadata["parent_block_id"] for doc in documents] == [None, "page", "h1", "h1", "page"]
     assert [doc.metadata["title_path"] for doc in documents] == [
         ["页面"], ["页面", "章节"], ["页面", "章节"],
         ["页面", "章节", "小节"], ["页面", "另一章"],
@@ -227,7 +227,7 @@ def test_heading_inside_nonstructural_container_does_not_reassign_later_siblings
     ))
     assert documents[2].metadata["title_path"] == ["页面", "内部章节"]
     assert documents[3].metadata["title_path"] == ["页面"]
-    assert documents[3].metadata["parent_document_id"] == "page"
+    assert documents[3].metadata["parent_block_id"] == "page"
     assert_references(documents)
 
 
@@ -243,7 +243,7 @@ def test_code_language_and_safe_fence_preserve_original(language: int | None, ex
 def test_code_trailing_newlines_and_structured_child() -> None:
     documents = load_feishu_doc_structre(page(node("code", 14, "a\n\n", node("image", 27, "图"))))
     assert "```\na\n\n```" in documents[1].page_content
-    assert documents[2].metadata["parent_document_id"] == "code"
+    assert documents[2].metadata["parent_block_id"] == "code"
     assert documents[1].page_content.index("</document-ref>") > documents[1].page_content.index("a\n\n```")
 
 
@@ -268,7 +268,7 @@ def test_table_children_extract_all_structural_kinds_at_original_positions() -> 
     )])
     documents = load_feishu_doc_structre(page(source))
     assert [doc.id for doc in documents] == ["page", "table", "image", "code", "h", "nested-table"]
-    assert [doc.metadata["parent_document_id"] for doc in documents] == [None, "page", "table", "table", "table", "h"]
+    assert [doc.metadata["parent_block_id"] for doc in documents] == [None, "page", "table", "table", "table", "h"]
     content = documents[1].page_content
     assert "前文 &lt;&amp;&gt;" in content
     assert "<document-ref" in content and "&lt;document-ref" not in content
@@ -366,5 +366,5 @@ def test_deep_children_traversal_ignores_other_links() -> None:
     documents = load_feishu_doc_structre(root)
     assert [doc.id for doc in documents] == ["page", "image"]
     assert "深层正文" in documents[0].page_content
-    assert documents[1].metadata["parent_document_id"] == "page"
+    assert documents[1].metadata["parent_block_id"] == "page"
     assert_references(documents)

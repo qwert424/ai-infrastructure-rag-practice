@@ -23,9 +23,9 @@
 ## 读取契约
 
 - list_spaces 返回所有可访问空间；list_nodes 返回全部直接子节点，不递归；分页大小均为 50。
-  parent_node_token=None 表示空间根目录，不接受空 token。
-- list_all_space_nodes 按空间和目录广度遍历，返回扁平列表；按 `(space_id, node_token)` 去重，
-  指向相同 obj_token 的不同节点仍保留；不读取正文，不保证跨请求的数据快照一致。
+  parent_node_token=None 表示空间根目录，不接受空 token。两者内部由私有异步生成器逐页读取，对外仍返回完整列表。
+- list_all_space_nodes 返回 `AsyncIterator[WikiNode]`，按空间和目录广度遍历并按需读取分页：开始消费才发起网络请求，不预取下一页或目录；按 `(space_id, node_token)` 去重，
+  指向相同 obj_token 的不同节点仍保留；不读取正文，不保证跨请求的数据快照一致。后续请求失败向消费方抛出异常，已产出节点不撤回，也不代表空结果。
 - WikiNode.obj_type 仍为 Literal["docx"]；其他类型抛出 UnsupportedWikiNodeTypeError，
   不转换、不静默过滤；混合类型空间的全量遍历会失败。
 - 节点 URL 按 `https://www.feishu.cn/wiki/{node_token}` 生成，不使用 obj_token 或服务返回 URL；

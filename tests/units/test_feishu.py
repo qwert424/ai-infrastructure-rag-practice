@@ -12,7 +12,7 @@ from lark_oapi.core.cache import LocalCache
 from lark_oapi.core.token import TokenManager
 from pydantic import ValidationError
 
-from deal_pilot.feishu.api import DocxAPI, WikiAPI
+from deal_pilot.feishu.api import DocxAPI, ImageAPI, WikiAPI
 from deal_pilot.feishu.api import _client
 from deal_pilot.feishu.api.errors import (
     FeishuAPIError,
@@ -22,6 +22,7 @@ from deal_pilot.feishu.api.errors import (
     FeishuResponseError,
     UnsupportedWikiNodeTypeError,
 )
+from deal_pilot.feishu.api.models import WikiNode
 
 
 def ok(data):
@@ -38,6 +39,10 @@ def node(token, *, space_id="s1", parent="", has_child=False, obj_token=None, ob
         "obj_type": obj_type, "title": f"标题 {token}", "parent_node_token": parent,
         "has_child": has_child,
     }
+
+
+async def collect_all_nodes() -> list[WikiNode]:
+    return [item async for item in WikiAPI().list_all_space_nodes()]
 
 
 @pytest.fixture
@@ -129,6 +134,64 @@ def test_get_space_node_and_docx_mapping_share_token(mock_feishu):
     assert sum(r.method == "POST" for r in requests) == 1
 
 
+@pytest.mark.parametrize("mime", ["image/png", "image/jpeg; charset=binary", "IMAGE/WEBP"])
+def test_download_image_returns_bytes_and_mime_off_event_loop(mock_feishu, mime):
+    data = b"\x89PNG\x00\xff\r\n"
+
+    def handler(request):
+        assert request.url.path == "/open-apis/drive/v1/medias/image-token/download"
+        assert not request.url.params
+        return httpx.Response(200, content=data, headers={"Content-Type": mime})
+
+    requests, threads = mock_feishu(handler)
+    result = asyncio.run(ImageAPI().download_image("image-token"))
+    assert result.mime == mime.split(";", 1)[0].lower()
+    assert result.data == data
+    assert len(requests) == 2
+    assert all(t != threading.get_ident() for t in threads)
+
+
+@pytest.mark.parametrize("status", [200, 400, 403, 404, 429])
+def test_download_image_business_errors_are_not_binary_success(mock_feishu, status):
+    mock_feishu(lambda _: httpx.Response(
+        status, json={"code": 99991672, "msg": "fake-secret fake-token"},
+        headers={"X-Tt-Logid": "image-log"},
+    ))
+    with pytest.raises(FeishuAPIError) as caught:
+        asyncio.run(ImageAPI().download_image("image-token"))
+    assert (caught.value.code, caught.value.http_status, caught.value.log_id) == (99991672, status, "image-log")
+    assert "fake-secret" not in str(caught.value)
+
+
+@pytest.mark.parametrize("status", [403, 500, 503])
+def test_download_image_non_json_http_errors(mock_feishu, status):
+    mock_feishu(lambda _: httpx.Response(status, text="error"))
+    with pytest.raises(FeishuHTTPError) as caught:
+        asyncio.run(ImageAPI().download_image("image-token"))
+    assert caught.value.http_status == status
+
+
+@pytest.mark.parametrize("response", [
+    lambda: httpx.Response(200, content=b"png"),
+    lambda: httpx.Response(200, text="not an image"),
+    lambda: httpx.Response(200, json={"code": 0}),
+    lambda: httpx.Response(200, json={"code": False}),
+    lambda: httpx.Response(200, content=b"{", headers={"Content-Type": "application/json"}),
+])
+def test_download_image_rejects_invalid_response(mock_feishu, response):
+    mock_feishu(lambda _: response())
+    with pytest.raises(FeishuResponseError):
+        asyncio.run(ImageAPI().download_image("image-token"))
+
+
+@pytest.mark.parametrize("token", ["", " ", "a/b", "https://example.com/img"])
+def test_download_image_rejects_invalid_token_without_network(mock_feishu, token):
+    requests, _ = mock_feishu(lambda _: pytest.fail("不应调用 API"))
+    with pytest.raises(ValueError):
+        asyncio.run(ImageAPI().download_image(token))
+    assert requests == []
+
+
 @pytest.mark.parametrize("parent", [None, "parent"])
 def test_list_nodes_reads_all_direct_children_only(mock_feishu, parent):
     def handler(request):
@@ -160,7 +223,7 @@ def test_list_all_nodes_traverses_spaces_deduplicates_nodes_not_documents(mock_f
         return page([node("leaf", parent="child")])
 
     requests, _ = mock_feishu(handler)
-    entries = asyncio.run(WikiAPI().list_all_space_nodes())
+    entries = asyncio.run(collect_all_nodes())
     assert [(n.space_id, n.node_token) for n in entries] == [
         ("s1", "n1"), ("s1", "shortcut"), ("s1", "child"), ("s1", "leaf"), ("s2", "n1"),
     ]
@@ -168,12 +231,52 @@ def test_list_all_nodes_traverses_spaces_deduplicates_nodes_not_documents(mock_f
     assert all("/docx/" not in r.url.path for r in requests)
 
 
+@pytest.mark.parametrize("take,request_count", [(1, 3), (2, 3), (3, 4), (4, 5), (5, 7)])
+def test_all_nodes_requests_pages_and_directories_only_as_consumed(mock_feishu, take, request_count):
+    def handler(request):
+        token = request.url.params.get("page_token")
+        if request.url.path.endswith("/spaces"):
+            if token is None:
+                return page([{"space_id": "s1", "name": "一"}], has_more=True, page_token="spaces-next")
+            assert token == "spaces-next"
+            return page([{"space_id": "s2", "name": "二"}])
+        if "/s2/" in request.url.path:
+            return page([node("other", space_id="s2")])
+        parent = request.url.params.get("parent_node_token")
+        if parent is not None:
+            assert parent == "n1"
+            return page([node("child", parent="n1")])
+        if token is None:
+            return page([node("n1", has_child=True), node("n2")], has_more=True, page_token="nodes-next")
+        assert token == "nodes-next"
+        return page([node("n3")])
+
+    requests, _ = mock_feishu(handler)
+
+    async def scenario() -> None:
+        entries = WikiAPI().list_all_space_nodes()
+        assert requests == []
+        expected = ["n1", "n2", "n3", "child", "other"]
+        try:
+            for index in range(take):
+                assert (await anext(entries)).node_token == expected[index]
+                assert len(requests) == [3, 3, 4, 5, 7][index]
+            if take == len(expected):
+                with pytest.raises(StopAsyncIteration):
+                    await anext(entries)
+        finally:
+            await entries.aclose()
+        assert len(requests) == request_count
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("operation", ["spaces", "nodes", "all", "blocks"])
 def test_empty_lists(mock_feishu, operation):
     mock_feishu(lambda _: page([]))
     method = {
         "spaces": WikiAPI().list_spaces, "nodes": lambda: WikiAPI().list_nodes("s1"),
-        "all": WikiAPI().list_all_space_nodes, "blocks": lambda: DocxAPI().list_blocks("doc1"),
+        "all": collect_all_nodes, "blocks": lambda: DocxAPI().list_blocks("doc1"),
     }[operation]
     assert asyncio.run(method()) == []
 
@@ -233,8 +336,41 @@ def test_all_nodes_does_not_skip_failing_space(mock_feishu):
         return httpx.Response(400, json={"code": 131006})
 
     mock_feishu(handler)
-    with pytest.raises(FeishuAPIError):
-        asyncio.run(WikiAPI().list_all_space_nodes())
+
+    async def scenario() -> None:
+        entries = WikiAPI().list_all_space_nodes()
+        assert (await anext(entries)).node_token == "n1"
+        with pytest.raises(FeishuAPIError):
+            await anext(entries)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("failure", ["api", "cursor"])
+def test_all_nodes_propagates_later_node_page_failure(mock_feishu, failure):
+    def handler(request):
+        if request.url.path.endswith("/spaces"):
+            return page([{"space_id": "s1", "name": "一"}])
+        if "page_token" in request.url.params:
+            if failure == "api":
+                return httpx.Response(429, json={"code": 99991400})
+            return page([], has_more=True, page_token="next")
+        return page([node("n1", has_child=True)], has_more=True, page_token="next")
+
+    requests, _ = mock_feishu(handler)
+
+    async def scenario() -> None:
+        entries = WikiAPI().list_all_space_nodes()
+        assert (await anext(entries)).node_token == "n1"
+        assert len(requests) == 3
+        error = FeishuAPIError if failure == "api" else FeishuResponseError
+        with pytest.raises(error):
+            await anext(entries)
+        assert len(requests) == 4
+        with pytest.raises(StopAsyncIteration):
+            await anext(entries)
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("operation", ["get", "list", "all"])
@@ -249,7 +385,7 @@ def test_unsupported_node_type_is_explicit_error(mock_feishu, operation):
     mock_feishu(handler)
     method = {
         "get": lambda: WikiAPI().get_node("n1"), "list": lambda: WikiAPI().list_nodes("s1"),
-        "all": WikiAPI().list_all_space_nodes,
+        "all": collect_all_nodes,
     }[operation]
     with pytest.raises(UnsupportedWikiNodeTypeError):
         asyncio.run(method())
