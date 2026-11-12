@@ -1,4 +1,4 @@
-from deal_pilot.benchmarks.experiment import run_experiment
+from deal_pilot.benchmarks.experiment import registered_datasets, run_experiment
 from deal_pilot.benchmarks.dataset import get_all_datasets
 
 
@@ -9,5 +9,10 @@ def run_benchmark(dataset_name: str):
 
 
 def run_all_benchmarks():
-    datasets = get_all_datasets()
-    return [run_benchmark(ds.name) for ds in datasets]
+    """只运行已注册评估配置的数据集；未注册的数据集不参与。"""
+    registered = registered_datasets()
+    return [
+        run_benchmark(dataset.name)
+        for dataset in get_all_datasets()
+        if dataset.name in registered
+    ]

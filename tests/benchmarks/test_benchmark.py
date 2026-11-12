@@ -15,6 +15,7 @@ def test_benchmark_regression():
     # Langfuse SDK 和模型客户端会从进程环境读取配置，需在导入项目模块前加载。
     load_dotenv(Path(__file__).resolve().parents[2] / ".env")
     from deal_pilot.benchmarks.benchmark import run_all_benchmarks, run_benchmark
+    from deal_pilot.benchmarks.experiment import metric_names
 
     dataset_name = os.environ.get("BENCHMARK_DATASET", "").strip()
     assert dataset_name, "请运行 make test-benchmark DS=all 或 DS=<数据集名称>"
@@ -23,13 +24,17 @@ def test_benchmark_regression():
         results = run_all_benchmarks()
         reports = [
             _summarize_benchmark_result(
-                result.name.removeprefix(EXPERIMENT_NAME_PREFIX), result
+                result.name.removeprefix(EXPERIMENT_NAME_PREFIX),
+                result,
+                metric_names(result.name.removeprefix(EXPERIMENT_NAME_PREFIX)),
             )
             for result in results
         ]
     else:
         reports = [
-            _summarize_benchmark_result(dataset_name, run_benchmark(dataset_name))
+            _summarize_benchmark_result(
+                dataset_name, run_benchmark(dataset_name), metric_names(dataset_name)
+            )
         ]
 
     _print_report(reports)
@@ -43,12 +48,19 @@ def test_benchmark_regression():
         )
 
 
-def _summarize_benchmark_result(dataset_name, result):
+def _summarize_benchmark_result(dataset_name, result, expected_metrics=None):
     from deal_pilot.benchmarks.dataset import get_items
 
     items = get_items(dataset_name)
-    scores = {e.name: [] for row in result.item_results for e in row.evaluations}
-    thresholds = {name: set() for name in scores}
+    names = (
+        list(expected_metrics)
+        if expected_metrics
+        else sorted(
+            {e.name for row in result.item_results for e in row.evaluations}
+        )
+    )
+    scores = {name: [] for name in names}
+    thresholds = {name: set() for name in names}
     passed_items = 0
     failed_cases = []
     completed_ids = set()
@@ -69,6 +81,10 @@ def _summarize_benchmark_result(dataset_name, result):
         seen_names = set()
         for evaluation in row.evaluations:
             name = evaluation.name
+            if name not in scores:
+                failed_cases.append(f"{case_name}: 出现未声明的评分 {name}")
+                case_passed = False
+                continue
             if name in seen_names:
                 failed_cases.append(f"{case_name}: {name} 评分重复")
                 case_passed = False

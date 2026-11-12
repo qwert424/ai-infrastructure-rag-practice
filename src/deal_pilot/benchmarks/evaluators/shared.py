@@ -8,6 +8,7 @@ from langfuse import CompositeEvaluatorFunction, Evaluation
 from langfuse.experiment import EvaluatorFunction, TaskFunction
 from pydantic import BaseModel, Field
 from deal_pilot.config.benchmark_settings import benchmark_settings
+from deal_pilot.config.nacos.nacos_schemas import AgentModelConfig
 from opentelemetry import trace
 from langfuse.api import DatasetItem
 from langfuse import get_client
@@ -21,6 +22,7 @@ from langchain.agents.structured_output import ToolStrategy
 class EvalConfig:
     task: TaskFunction
     evaluators: list[EvaluatorFunction]
+    metric_names: list[str]
     composite_evaluator: CompositeEvaluatorFunction | None = None
 
 
@@ -168,7 +170,8 @@ def create_llm_score_evaluator(
                 comment="没有预期输出",
                 metadata={"test": {"threshold": 0.8}},
             )
-        model = create_model()
+        # ToolStrategy 会强制 tool_choice，思考模式下的网关会以 400 拒绝，评分模型必须关闭 thinking。
+        model = create_model(AgentModelConfig(thinking=False))
         agent = create_agent(
             model=model,
             system_prompt=prompt,

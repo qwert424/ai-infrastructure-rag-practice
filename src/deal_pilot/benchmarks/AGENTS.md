@@ -15,7 +15,7 @@
 
 ## 回归标准
 
-- 真实回归入口为 `tests/benchmarks/test_benchmark.py`，通过 `make test-benchmark DS=<名称>` 或 `DS=all` 执行。
+- 真实回归入口为 `tests/benchmarks/test_benchmark.py`，通过 `make test-benchmark DS=<名称>` 或 `DS=all` 执行。`DS=all` 只运行已在 `_config` 注册的数据集，其余数据集被跳过；单数据集入口对未注册名称抛 `RuntimeError`。
 - 当前门槛为 0.8：每条用例都要有唯一、有限且在 0–1 的总体评分，并达到门槛；平均分也需达标，缺输出、缺评分、未完成或空数据集会失败。
 - 不只用平均分掩盖单条失败，不把模型调用失败当成质量评分，也不通过跳过失败用例让报告通过。
 - 修改评测标准说明原因和可比性影响；旧实验和新实验评分不一定能直接比较。

@@ -64,7 +64,7 @@
 | `MINIO_INTEGRATION=1 DEPLOY_INTEGRATION=1 DEPLOY_SANDBOX_IMAGE=<已准备的镜像> uv run pytest -q tests/intergrations/test_deploy.py` | 真实 MinIO 与 OpenSandbox 部署验证                                                      |
 | `make test-integrations`                                                                                                           | 当前 Makefile 同时启用 MinIO 和 Deploy，并固定镜像为 `opensandbox-python-node:1.0`      |
 | `make test-benchmark DS=<数据集名称>`                                                                                              | 对指定真实数据集评测，会调用 Agent 和模型并记录实验                                     |
-| `make test-benchmark DS=all`                                                                                                       | 对全部 Langfuse 数据集评测；每个数据集都需在 `experiment._config` 注册，否则抛 `RuntimeError`，注意调用量和费用          |
+| `make test-benchmark DS=all`                                                                                                       | 对全部已注册评估配置的数据集评测，未注册的数据集跳过；注意调用量和费用                                                  |
 
 `make docker-recreate` 会强制重建 Compose 容器，不是普通测试的准备步骤。集成测试不会替你启动服务或构建镜像；详细测试契约见 `tests/intergrations/README.md`，若其命令说明与 Makefile 不一致，以实际 Makefile 和测试启用条件为准。
 

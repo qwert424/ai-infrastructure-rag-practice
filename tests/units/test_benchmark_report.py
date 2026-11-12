@@ -78,6 +78,24 @@ def test_each_metric_uses_its_returned_threshold(
     assert report["passed_items"] == int(passed)
 
 
+def test_declared_metric_never_reported_fails(items: list[SimpleNamespace]) -> None:
+    result = _result(items, [[_evaluation("retrieve_precision", 0.9, 0.8)]])
+
+    report = _summarize("retrieve", result, ["retrieve_precision", "correctness"])
+
+    assert not report["passed"]
+    assert any("correctness 评分缺失" in case for case in report["failed_cases"])
+
+
+def test_undeclared_metric_fails(items: list[SimpleNamespace]) -> None:
+    result = _result(items, [[_evaluation("precision", 0.9, 0.8)]])
+
+    report = _summarize("retrieve", result, ["retrieve_precision"])
+
+    assert not report["passed"]
+    assert any("未声明的评分 precision" in case for case in report["failed_cases"])
+
+
 def test_threshold_can_vary_between_items(items: list[SimpleNamespace]) -> None:
     items.append(SimpleNamespace(id="case-2", input="第二个问题"))
     result = _result(
