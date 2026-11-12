@@ -28,6 +28,7 @@ dependencies = [
     "numpy>=2.5.4",
     "pypdf>=6.20.1",
     "lark-oapi>=1.7.4",
+    "pymilvus>=3.0.2",
 ]
 
 [dependency-groups]
