@@ -25,7 +25,7 @@
 - `rag/loader/feishu_doc` 将已有标准树提取为 LangChain Documents；页面、标题、图片、表格和代码分别成文档，父文档保留正文和子文档占位引用。仅本地转换，不读取飞书、不重新构树或按长度切片。
 - `rag/splitter/feishu_doc` 对 loader 结果进一步切片：图片/代码不拆，表格首行表头加单行，页面/章节复用 LangChain 递归切分并保护占位符。切片新增序号与总数，block_id、parent_block_id 等保留来源结构含义；不执行向量化或入库。
 - `rag/store/feishu_doc` 使用 PyMilvus 异步客户端显式初始化数据库、集合及稠密/稀疏索引；已有集合仅比较稠密索引类型和度量，变化时释放集合、删除并重建稠密索引后重新加载。`get_store()` 复用该初始化并缓存 LangChain `Milvus` 实例。连接配置来自 `config/milvus_settings.py`，索引配置和新集合向量维度来自 Nacos `rag_config`；写入与旧版本删除由索引图调用，检索由 `rag/retriever/feishu_doc` 使用该实例。
-- `rag/retriever/feishu_doc` 提供 `search()`：按 `RetrieverConfig` 做 dense/sparse 双路召回，再交给 Milvus 服务端重排（rrf、weighted 或经 LiteLLM `/v1/rerank` 的模型重排），返回 `SearchResult`；未注册为 Agent 工具，由 `agents/retrieve_agent.py` 的工厂经 `before_agent` 中间件调用，未接入 `main_agent` 或服务启动流程。
+- `rag/retriever/feishu_doc` 提供 `search()`：按 `RetrieverConfig` 做 dense/sparse 双路召回，再交给 Milvus 服务端重排（rrf、weighted 或经 LiteLLM `/v1/rerank` 的模型重排），返回 `SearchResult`；未注册为 Agent 工具，由 `agents/retrieve_agent.py` 的工厂经 `before_agent` 中间件读取 `rag_config.retriever` 后调用，未接入 `main_agent` 或服务启动流程。
 - `utils` 只保留被其他模块复用的能力，不作为新增业务逻辑的默认归宿。
 
 ## 修改与验证

@@ -3,7 +3,7 @@
 ## 接口与参数
 
 - `search(question: str, *, filter: str | None = None, config: RetrieverConfig | None = None, threshold: float = 0) -> list[SearchResult]`；`SearchResult` 是 dataclass，含 `doc: Document` 与 `score: float`。
-- `config` 为 `RetrieverConfig`：`fetch_k`（每路候选，默认 10）、`k`（最终返回，默认 4）、`param`（两路检索参数，按 `vector_field=["dense", "sparse"]` 顺序，默认 None）、`reranker`（`RerankerConfig`）。
+- `config` 为 `RetrieverConfig`：`fetch_k`（每路候选，默认 10）、`k`（最终返回，默认 4）、`param`（检索参数，默认 None；单路可用 `dict`，双路用按 `vector_field=["dense", "sparse"]` 顺序的 `list[dict]`，长度须与向量字段数一致）、`reranker`（`RerankerConfig`）。
 - 直接调用 `store.asimilarity_search_with_score(query=..., fetch_k=..., k=..., param=..., expr=filter, reranker=...)`，不自己实现召回或打分。`fetch_k` 经 `**kwargs` 透传给 langchain-milvus，是否真正限制每路召回数量未验证。
 - `filter` 原样作为 Milvus 表达式传入，模块不做转义、字段名校验或空值处理；非法表达式由 Milvus 报错。
 - 结果按 `score >= threshold` 过滤，默认 0。分数含义随重排方式变化（实测 rrf 约 0.03，weighted 与模型重排约 0.9），不同重排模式的阈值不可互相套用。

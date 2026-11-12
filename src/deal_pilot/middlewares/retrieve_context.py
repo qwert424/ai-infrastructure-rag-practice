@@ -3,6 +3,8 @@ import json
 from deepagents import DeepAgentState
 from langchain.agents.middleware import Runtime, before_agent
 from langchain.messages import AnyMessage, HumanMessage
+from deal_pilot.config.nacos.nacos_config import get_config
+from deal_pilot.config.nacos.nacos_schemas import RagConfig
 from deal_pilot.rag.retriever.feishu_doc.feishu_doc_retriever import search
 
 _RETRIEVE_MESSAGE_NAME = "retrieval_results"
@@ -25,13 +27,15 @@ async def retrieve_context(state: DeepAgentState, runtime: Runtime):
         raise ValueError("检索需要非空的消息列表")
     query_msg = msgs[-1]
     _validate_last_msg(query_msg)
-    results = await search(query_msg.text)
+    config = (await get_config("rag_config", RagConfig)).retriever
+    results = await search(query_msg.text, config=config)
     content = json.dumps(
         [
             {"doc": result.doc.model_dump(mode="json"), "score": result.score}
             for result in results
         ],
         ensure_ascii=False,
+        indent=2,
     )
     return {
         "messages": [

@@ -16,7 +16,8 @@
 ## 检索中间件契约
 
 - 触发阶段固定为 `before_agent`，每轮开始前执行一次；消息列表为空、最后一条不是 HumanMessage、最后一条就是本中间件注入的消息，或用户文本为空时抛 `ValueError`，不静默跳过。
-- 直接以最后一条用户消息的文本调用 `rag/retriever/feishu_doc.search()`，不传 `filter`、`config`、`threshold`，因此使用 `RetrieverConfig` 本地默认值而非 Nacos 配置。
+- 直接以最后一条用户消息的文本调用 `rag/retriever/feishu_doc.search()`，`config` 取自 Nacos `rag_config.retriever`（未发布时回退 `RetrieverConfig()` 默认值），不传 `filter`、`threshold`。
+- Nacos 内容存在但无法通过 `RagConfig` 校验时，`get_config` 直接抛 `ValidationError`，不会静默回退默认值；排查配置不生效时先确认 dataId=`rag_config`、group=`deal_pilot`。
 - 返回 `{'messages': [HumanMessage(...)]}`：内容为 `doc`（`Document.model_dump(mode='json')`）与 `score` 组成的 JSON 数组，`name` 固定为 `retrieval_results`；该消息追加在用户查询之后，用于与普通用户消息区分。
 - 检索异常直接向上传播，不转换为空结果；检索结果内容仅供模型参考，不截断。
 
