@@ -41,7 +41,11 @@ def _event(message: dict | None = None, sender: dict | None = None) -> FeishuEve
         payload={
             "event": {
                 "message": _text_message() if message is None else message,
-                "sender": {"sender_type": "user"} if sender is None else sender,
+                "sender": (
+                    {"sender_type": "user", "sender_id": {"open_id": "ou_1"}}
+                    if sender is None
+                    else sender
+                ),
             }
         },
     )
@@ -50,7 +54,9 @@ def _event(message: dict | None = None, sender: dict | None = None) -> FeishuEve
 def test_replies_to_same_chat(send_text: AsyncMock) -> None:
     asyncio.run(message_handler(_event()))
 
-    send_text.assert_awaited_once_with("oc_1", "你好", receive_id_type="chat_id")
+    send_text.assert_awaited_once_with(
+        "oc_1", "你好", user_id="ou_1", receive_id_type="chat_id"
+    )
 
 
 def test_duplicate_message_id_replies_once(send_text: AsyncMock) -> None:
@@ -79,7 +85,7 @@ def test_unusable_message_is_skipped(send_text: AsyncMock, overrides: dict) -> N
 
 
 def test_bot_sender_is_ignored(send_text: AsyncMock) -> None:
-    asyncio.run(message_handler(_event(sender={"sender_type": "bot"})))
+    asyncio.run(message_handler(_event(sender={"sender_type": "bot", "sender_id": {"open_id": "ou_1"}})))
 
     send_text.assert_not_awaited()
 
@@ -89,7 +95,15 @@ def test_group_mention_placeholder_is_stripped(send_text: AsyncMock) -> None:
 
     asyncio.run(message_handler(_event(message=message)))
 
-    send_text.assert_awaited_once_with("oc_1", "你好", receive_id_type="chat_id")
+    send_text.assert_awaited_once_with(
+        "oc_1", "你好", user_id="ou_1", receive_id_type="chat_id"
+    )
+
+
+def test_missing_sender_open_id_is_skipped(send_text: AsyncMock) -> None:
+    asyncio.run(message_handler(_event(sender={"sender_type": "user"})))
+
+    send_text.assert_not_awaited()
 
 
 def test_missing_event_body_is_skipped(send_text: AsyncMock) -> None:

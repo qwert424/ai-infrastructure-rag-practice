@@ -10,7 +10,7 @@ else
 INTEGRATION_ENV = MINIO_INTEGRATION=1 DEPLOY_INTEGRATION=1 DEPLOY_SANDBOX_IMAGE=$(DEPLOY_SANDBOX_IMAGE)
 endif
 
-.PHONY: docker-recreate build dev debug test-benchmark test-units test-integrations
+.PHONY: docker-recreate build dev debug test-benchmark test-units test-integrations test-agent-token
 
 docker-recreate:
 	docker compose up -d --force-recreate
@@ -32,3 +32,6 @@ test-units:
 
 test-integrations:
 	$(INTEGRATION_ENV) uv run pytest -q tests/intergrations
+
+test-agent-token:
+	uv run python -c "from deal_pilot.security.agent_token import create_agent_token; print(create_agent_token('test_user'))"

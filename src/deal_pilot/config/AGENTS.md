@@ -19,6 +19,7 @@
 | TavilySettings    | `TAVILY_`       |
 | FeishuSettings    | `FEISHU_`       |
 | MilvusSettings    | `MILVUS_`       |
+| AgentSettings     | `AGENT_`        |
 
 - Settings 实例在模块导入时创建；修改环境后不会自动重建已有实例。验证配置时先准备环境再导入。
 - `.env` 路径相对于运行目录，命令应从项目根目录执行。

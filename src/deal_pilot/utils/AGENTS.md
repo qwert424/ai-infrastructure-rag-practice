@@ -13,7 +13,7 @@
 | `langfuse_signature.py`                      | Webhook HMAC 验签                                      |
 | `get_prompt.py`                              | 将 Langfuse 同步 Prompt 读取隔离到线程                 |
 | `cleanup_expired_traces.py`                  | 按保留期提交 trace 删除请求                            |
-| `mock_user.py`                               | 本地模拟身份数据，不能当作生产用户中心                 |
+| `run_agent.py`                               | 经 Agent Server 运行 Agent，输出状态与正文快照         |
 
 ## 身份、模型与追踪
 

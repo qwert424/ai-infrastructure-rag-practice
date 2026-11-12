@@ -45,6 +45,8 @@ async def message_handler(event: FeishuEvent) -> None:
     message_id = message.get("message_id")
     chat_id = message.get("chat_id")
     content = message.get("content")
+    sender_id = sender.get("sender_id")
+    open_id = sender_id.get("open_id") if isinstance(sender_id, dict) else None
     if not isinstance(message_id, str) or not message_id:
         logger.warning("飞书消息事件缺少 message_id")
         return
@@ -52,6 +54,9 @@ async def message_handler(event: FeishuEvent) -> None:
         return
     if not isinstance(chat_id, str) or not chat_id or not isinstance(content, str):
         logger.warning("飞书消息事件缺少 chat_id 或 content：%s", message_id)
+        return
+    if not isinstance(open_id, str) or not open_id:
+        logger.warning("飞书消息事件缺少 sender open_id：%s", message_id)
         return
 
     try:
@@ -66,7 +71,12 @@ async def message_handler(event: FeishuEvent) -> None:
         return
 
     try:
-        await reply(chat_id, text, receive_id_type="chat_id")
+        await reply(
+            chat_id,
+            text,
+            user_id=open_id,
+            receive_id_type="chat_id",
+        )
     except Exception:
         logger.exception("回复飞书消息失败：%s", message_id)
         # 发送失败不占用幂等标记，飞书重投时仍可尝试。

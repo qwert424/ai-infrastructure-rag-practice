@@ -2,7 +2,7 @@
 
 ## 职责与入口
 
-- `agent_factory.py` 定义组装流程；`main.py` 提供 `main_agent` 工厂及追踪包装；`retrieve_agent.py` 提供 `retrieve_agent` 工厂及追踪包装，并定义 `RetrieveResponse`（`status`/`answer`/`sources`/`gaps`）作为结构化输出；`web.py` 提供 `web_agent` 子 Agent 工厂。
+- `agent_factory.py` 定义组装流程；`main.py` 提供 `main_agent` 工厂及追踪包装；`retrieve_agent.py` 提供 `retrieve_agent` 工厂及追踪包装，定义 `RetrieveResponse`（`status`/`answer`/`sources`/`gaps`）作为结构化输出，并覆盖 `factory()` 用 `create_agent` 组装普通检索 Agent（不做沙箱后端）。`web.py` 已移除。
 - `main_agent_state.py` 在 `DeepAgentState` 上增加 `turn_summary`，与轮次中间件保持一致。
 
 ## 创建流程
@@ -13,7 +13,7 @@
 
 - Agent 名称决定远程配置和 Skill 目录；不能只改本地属性而遗漏 Nacos 与调用方。
 - 内置工具来自 `tools.get_tools()`。MCP 使用 `streamable_http` 和工具名前缀，禁用列表通过 `{mcp_name}_{tool_name}` 匹配；保持两边命名一致。
-- 子 Agent 只从 `_AGENT_FACTORIES` 映射加载，当前只注册 `web_agent`，模块必须导出异步 `factory`。未注册的远程名称当前会被忽略。
+- 子 Agent 只从 `_AGENT_FACTORIES` 映射加载，当前注册 `retrieve_agent`，模块必须导出异步 `factory`；加载子 Agent 时用 `get_agent_spec(..., sync_skills=False)` 跳过共享卷 Skill 同步。未注册的远程名称当前会被忽略。
 - 子 Agent 使用 `CompiledSubAgent` 包装已创建的 runnable，避免把原始 AgentSpec 当成可运行图。
 - 主 Agent 使用 `MainAgentState` 与 `turn_summary` 中间件；新增状态字段时同步检查写入方和消费者。
 - 工厂实例保留 `agent_config`，MCP 工具还有独立的 86400 秒缓存；涉及配置刷新或并发组装时检查共享状态与缓存影响，不假设 Nacos 更新立即生效。

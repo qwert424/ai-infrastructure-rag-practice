@@ -8,6 +8,7 @@ from langfuse import CompositeEvaluatorFunction, Evaluation
 from langfuse.experiment import EvaluatorFunction, TaskFunction
 from pydantic import BaseModel, Field
 from deal_pilot.config.benchmark_settings import benchmark_settings
+from deal_pilot.security.agent_token import create_agent_token
 from deal_pilot.config.nacos.nacos_schemas import AgentModelConfig
 from opentelemetry import trace
 from langfuse.api import DatasetItem
@@ -36,7 +37,7 @@ async def run_agent(agent_name: str, input: str):
     env = span_attributes.get("langfuse.environment")
     async with get_agent_client(
         url=benchmark_settings.agent_server,
-        headers={"Authorization": f"Bearer {benchmark_settings.user_id}"},
+        headers={"Authorization": f"Bearer {create_agent_token(benchmark_settings.user_id)}"},
     ) as client:
         result = await client.runs.wait(
             thread_id=None,

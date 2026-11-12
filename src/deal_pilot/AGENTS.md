@@ -10,7 +10,7 @@
 - `langgraph.json` 另导出 `retrieve_agent` → `agents/retrieve_agent.py:factory_with_trace`，该工厂只挂载 `middlewares/retrieve_context.py` 的检索中间件。
 - 工厂读取 `config/nacos` 的 AgentSpec，组装模型、内置工具、MCP、子 Agent 和 Skill，交给 Deep Agents 创建运行图。
 - 工具和后端从 `utils/shared.py` 获取认证用户与会话；`backends/sandbox_backend.py` 通过 `utils/sandbox.py` 连接或创建执行环境。
-- `app` 的 lifespan 启动 `event` 的飞书 IM 事件监听（`FEISHU_EVENTS_ENABLED=false` 可关闭），监听失败只告警；事件回调不经过 LangGraph HTTP 认证。
+- `app` 的 lifespan 启动 `event` 的飞书 IM 事件监听（`FEISHU_EVENTS_ENABLED=false` 可关闭），监听失败只告警；事件回调不经过 LangGraph HTTP 认证，而是用 `security/agent_token.py` 按发送者 open_id 签发令牌，经 `utils/run_agent.py` 调用 Agent Server。
 - `app` 接收 Langfuse Webhook；实验入口调用 `benchmarks`，评分由 `benchmarks/evaluators` 提供。
 - `graphs` 保存手工构建的普通 LangGraph 图；当前将清理任务包装为可调度图，删除细节位于 `utils/cleanup_expired_traces.py`。
 
