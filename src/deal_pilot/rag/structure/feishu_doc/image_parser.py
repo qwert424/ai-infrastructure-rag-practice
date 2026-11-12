@@ -12,6 +12,11 @@ from deal_pilot.config.nacos.nacos_schemas import RagConfig
 from deal_pilot.rag.structure.feishu_doc.block_node import BlockNode
 from deal_pilot.rag.structure.feishu_doc.block_type import BlockType
 from deal_pilot.utils.minio import MinIO
+from langchain.agents import create_agent
+from deal_pilot.utils.create_model import create_model
+from deal_pilot.config.nacos.nacos_prompt import get_prompt
+from langchain.messages import HumanMessage
+from deal_pilot.feishu.api import ImageAPI
 
 
 class ImageLocation(BaseModel):
@@ -126,5 +131,45 @@ async def _attachment_info(image_block: BlockNode) -> AttachmentInfo:
 
 
 async def parse_image_block(image_block: BlockNode) -> None:
-    image_block.payload = {"token": image_block.content}
-    image_block.content = f"图片token: {image_block.content}"
+    rag_config = await get_config("rag_config", RagConfig)
+    model = create_model(rag_config.image_parser.vl_model_config)
+    system_prompt = await get_prompt(rag_config.image_parser.image_parser_prompt)
+    agent = create_agent(model=model, system_prompt=system_prompt)
+    attachment = await _attachment_info(image_block)
+    parent_trace = "/".join(attachment.parent_trace)
+    prevs = "\n\n".join(attachment.prevs)
+    nexts = "\n\n".join(attachment.nexts)
+
+    text_content = f"""
+parent_trace:
+{parent_trace}
+
+prevs:
+{prevs}
+
+nexts:
+{nexts}
+"""
+    img_api = ImageAPI()
+    img = await img_api.download_image(image_block.content)
+    minio_result = await _upload_minio(img.data, img.mime, image_block.block_id)
+    dataurl = _generate_dataurl(img.data, img.mime)
+
+    result = await agent.ainvoke(
+        {
+            "messages": [
+                HumanMessage(
+                    [
+                        {"type": "text", "text": text_content},
+                        {"type": "image_url", "image_url": {"url": dataurl}},
+                    ]
+                )
+            ]
+        }
+    )
+
+    image_block.content = result["messages"][-1].text
+    image_block.payload = {
+        "bucket_name": minio_result.bucket_name,
+        "bucket_filename": minio_result.filename,
+    }
