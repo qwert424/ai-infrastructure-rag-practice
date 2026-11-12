@@ -11,7 +11,7 @@ _store: Milvus | None = None
 _lock = asyncio.Lock()
 
 
-async def get_store() -> Milvus:
+async def get_store():
     global _store
 
     async with _lock:
@@ -19,7 +19,8 @@ async def get_store() -> Milvus:
             await init_store()
             config = await get_config("rag_config", RagConfig)
             embedding = create_embedding_model(config.embedding_model)
-            _store = Milvus(
+            _store = await asyncio.to_thread(
+                Milvus,
                 embedding_function=embedding,
                 collection_name=COLLECTION_NAME,
                 connection_args={
