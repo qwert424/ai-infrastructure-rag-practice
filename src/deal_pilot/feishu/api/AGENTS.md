@@ -5,10 +5,11 @@
 - `wiki.py:WikiAPI`：全量空间列表、空间信息、节点信息、全量直接子节点及所有空间的全层级节点。
 - `docx.py:DocxAPI`：新版文档元信息查询和全量块列表；不含旧版 doc。
 - `image.py:ImageAPI`：通过 Drive 素材接口下载 Docx 图片，返回 `DownloadedImage(mime: str, data: bytes)`。
+- `message.py:MessageAPI`：以应用身份发送文本消息（`im/v1/messages`），`receive_id_type` 支持 open_id/union_id/user_id/email/chat_id，可选 `uuid` 去重。
 - `models.py`：应用层 Pydantic 返回模型；不是官方响应结构的完整复刻。
 - `_client.py`：官方 SDK 客户端、线程隔离、响应校验、资源 ID 校验及分页；不自行管理 Token 或 HTTP。
 - `errors.py`：配置、Token 获取、业务响应、HTTP 状态、协议结构及不支持节点类型的错误。
-- `__init__.py`：仅导出 WikiAPI、DocxAPI 和 ImageAPI，没有模块级 API 实例，导入不请求网络。
+- `__init__.py`：导出 WikiAPI、DocxAPI、ImageAPI 和 MessageAPI，没有模块级 API 实例，导入不请求网络。
 
 ## 已实现的设计
 
@@ -40,6 +41,13 @@
 - `await ImageAPI().download_image(token)` 接收图片块的 `image.token`，请求 Drive `medias/{file_token}/download`，
   不使用 IM 消息图片接口。MIME 取响应 Content-Type，去参数并转小写；缺失或非 image/* 时抛 FeishuResponseError。
   返回原始 bytes，不生成 URL、Base64 或落盘。JSON 错误响应仍校验业务 code，包括 HTTP 200；非 JSON HTTP 错误抛 FeishuHTTPError。
+
+## 消息发送契约
+
+- `send_text(receive_id, text, *, receive_id_type="open_id", uuid=None) -> str` 只发送 `msg_type=text`，content 由本方法序列化为 `{"text": ...}`，返回飞书 `message_id`。
+- `receive_id_type` 支持 open_id、union_id、user_id、email、chat_id；群聊回复使用原消息 `chat_id`。`receive_id` 必须非空且不含空白。
+- `text` 必须非空白；`uuid` 为 1–50 字符的可选发送去重标识。参数错误抛 ValueError，业务错误沿用 `FeishuAPIError`，响应缺 `message_id` 抛 `FeishuResponseError`。
+- 不自动重试、不切换身份；调用方须已启用机器人能力并具备 `im:message:send_as_bot`（或 `im:message`）权限。
 
 ## SDK 与并发边界
 

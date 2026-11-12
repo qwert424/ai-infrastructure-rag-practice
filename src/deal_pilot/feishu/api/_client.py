@@ -8,6 +8,7 @@ from functools import lru_cache
 import lark_oapi as lark
 from lark_oapi.api.docx.v1.version import V1 as DocxV1
 from lark_oapi.api.drive.v1.version import V1 as DriveV1
+from lark_oapi.api.im.v1.version import V1 as ImV1
 from lark_oapi.api.wiki.v2.version import V2 as WikiV2
 from lark_oapi.core.exception import ObtainAccessTokenException, UnmarshalException
 from lark_oapi.core.model import BaseResponse
@@ -58,6 +59,12 @@ def drive_client() -> DriveV1:
     client = _client()
     assert client.drive is not None
     return client.drive.v1
+
+
+def im_client() -> ImV1:
+    client = _client()
+    assert client.im is not None
+    return client.im.v1
 
 
 def resource_id(value: str, name: str) -> str:

@@ -18,6 +18,7 @@
 - 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索由 `rag/retriever/feishu_doc` 的 `search()` 提供（双路召回加重排），既由独立图 `retrieve_agent` 的 `before_agent` 中间件在每轮开始前调用、把结果作为消息注入，也注册为工具 `milvus_search`；`milvus_query` 按标量表达式读取切片。两者都未接入 `main_agent` 的中间件。存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
 - 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。课件与 RAG 存储模块通过 PyMilvus 连接，不依赖 Milvus Lite。Milvus 的文本重排凭据放在本地 `docker/milvus/user.yaml`（已 gitignore，按 `user.yaml.example` 创建），只读挂载到容器 `/milvus/configs/user.yaml`；该文件含 API Key，不得入库或写进文档。
 - `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；已被 `graphs/feishu_doc_index` 索引流程调用，尚未接入 Agent 主流程；本地 Mock 测试不代表真实租户验证。
+- IM 消息事件由 `event` 注册回调、`feishu/event` 建立长连接与分发，`app` 的 lifespan 在启动时开启；当前仅做文本回显（回原 `chat_id`），按 `message_id` 进程内幂等，未接入 Agent 或 RAG。`FEISHU_EVENTS_ENABLED=false` 可关闭监听，启动失败只记录日志不阻断服务。
 - 鉴权当前使用 `utils/mock_user.py` 中的模拟用户；告警 Webhook 已验签并接收事件，尚未实现短信或邮件通知。
 - `graphs` 保存手工构建的普通 LangGraph 图，不存放通过 LangChain 或 Deep Agents 创建的 Agent 图；当前包含清理图 `delete_old_trace` 与飞书文档索引图 `feishu_doc_index`（含单文档子图）。调度计划由外部服务管理，代码中没有自动注册定时计划的逻辑。
 
@@ -31,6 +32,7 @@
 | `src/deal_pilot/security`                 | LangGraph 身份认证与资源授权                                                                                                                                                        |
 | `src/deal_pilot/backends`                 | Deep Agents 后端到 OpenSandbox 的适配                                                                                                                                               |
 | `src/deal_pilot/tools`                    | 模型可调用的工具及注册表                                                                                                                                                            |
+| `src/deal_pilot/event`                    | IM 业务事件回调注册与处理；监听连接、IPC 与并发分发由 `feishu/event` 提供，由 `app` 的 lifespan 启动                                                                                 |
 | `src/deal_pilot/middlewares`              | Agent 执行阶段的状态处理                                                                                                                                                            |
 | `src/deal_pilot/utils`                    | 模型、追踪、缓存、存储、沙箱等公共能力                                                                                                                                              |
 | `src/deal_pilot/benchmarks`               | 数据集与实验；`evaluators` 子目录负责评分                                                                                                                                           |
@@ -41,7 +43,7 @@
 | `src/deal_pilot/rag/splitter/feishu_doc`  | 结构 Documents 的本地进一步切片；图片/代码整体保留，表格首行表头加单行，页面/章节按段落、句子和长度切分，保护占位符并保留目标 overlap                                               |
 | `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化、可空字段与长度扩容的原地 Schema 同步、`space_title` 回填及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索经 `rag/retriever/feishu_doc` 使用该实例 |
 | `src/deal_pilot/rag/retriever/feishu_doc` | 双路召回与重排的 `search()`：按 `RetrieverConfig` 传入 `fetch_k`、`k`、两路 `param` 与 rrf/weighted/模型重排，返回带分数的 `SearchResult`；模型重排由 Milvus 侧调用 LiteLLM `/v1/rerank` |
-| `tests/units`                             | 函数缓存、飞书 Mock、文档构树、Documents 结构提取、进一步切片、Milvus Schema 同步/标题回填、Nacos `rag_config` 示例校验及 Benchmark 报告阈值判定单元测试                            |
+| `tests/units`                             | 函数缓存、飞书读取与消息回调 Mock、文档构树、Documents 结构提取、进一步切片、Milvus Schema 同步/标题回填、Nacos `rag_config` 示例校验及 Benchmark 报告阈值判定单元测试            |
 | `tests/intergrations`                     | MinIO、Deploy 与 Milvus Schema 同步集成测试，保留现有目录拼写                                                                                                                       |
 | `tests/benchmarks`                        | 依赖真实 Agent 和 Langfuse 的质量回归                                                                                                                                               |
 | `docker/sandbox/Dockerfile`               | 沙箱镜像，包含部署所需的上传工具                                                                                                                                                    |
