@@ -15,7 +15,7 @@
 
 - 当前项目是 Python Agent 服务：以 LangGraph Server 提供运行入口，以 Deep Agents 组装 Agent，以 Nacos 管理 AgentSpec、Prompt、Skill、MCP 与沙箱配置。
 - Langfuse 用于追踪、离线评测和 Webhook；OpenSandbox 提供用户执行环境；MinIO 用于产物存储与交付；模型通过 OpenAI 兼容接口及自定义模型适配层调用。
-- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索尚未实现；存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
+- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索由 `rag/retriever/feishu_doc` 的 `search()` 提供（双路召回加重排），尚未接入 Agent 主流程或工具；存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
 - 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。课件与 RAG 存储模块通过 PyMilvus 连接，不依赖 Milvus Lite。Milvus 的文本重排凭据放在本地 `docker/milvus/user.yaml`（已 gitignore，按 `user.yaml.example` 创建），只读挂载到容器 `/milvus/configs/user.yaml`；该文件含 API Key，不得入库或写进文档。
 - `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；已被 `graphs/feishu_doc_index` 索引流程调用，尚未接入 Agent 主流程；本地 Mock 测试不代表真实租户验证。
 - 鉴权当前使用 `utils/mock_user.py` 中的模拟用户；告警 Webhook 已验签并接收事件，尚未实现短信或邮件通知。
@@ -39,7 +39,8 @@
 | `src/deal_pilot/rag/structure/feishu_doc` | 异步构树、原始关系校验、标题归组、内容及元数据提取；完整树构建后按文档顺序串行调用图片处理（下载、私有桶上传、模型识图）；提供 Data URL、图片上下文辅助函数及树形字典往返               |
 | `src/deal_pilot/rag/loader/feishu_doc`    | 标准树到 LangChain Documents 的本地结构提取；父子占位引用、Markdown 正文、HTML 表格与合并校验，不按长度切片                                                                         |
 | `src/deal_pilot/rag/splitter/feishu_doc`  | 结构 Documents 的本地进一步切片；图片/代码整体保留，表格首行表头加单行，页面/章节按段落、句子和长度切分，保护占位符并保留目标 overlap                                               |
-| `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化、可空字段与长度扩容的原地 Schema 同步、`space_title` 回填及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索尚未实现 |
+| `src/deal_pilot/rag/store/feishu_doc`     | Milvus Schema 与索引参数、数据库/集合初始化、可空字段与长度扩容的原地 Schema 同步、`space_title` 回填及稠密索引重建，以及缓存的 LangChain `Milvus` 向量库实例；写入与旧版本删除由索引图调用，检索经 `rag/retriever/feishu_doc` 使用该实例 |
+| `src/deal_pilot/rag/retriever/feishu_doc` | 双路召回与重排的 `search()`：按 `RetrieverConfig` 传入 `fetch_k`、`k`、两路 `param` 与 rrf/weighted/模型重排，返回带分数的 `SearchResult`；模型重排由 Milvus 侧调用 LiteLLM `/v1/rerank` |
 | `tests/units`                             | 函数缓存、飞书 Mock、文档构树、Documents 结构提取、进一步切片及 Milvus Schema 同步/标题回填单元测试                                                                                 |
 | `tests/intergrations`                     | MinIO、Deploy 与 Milvus Schema 同步集成测试，保留现有目录拼写                                                                                                                       |
 | `tests/benchmarks`                        | 依赖真实 Agent 和 Langfuse 的质量回归                                                                                                                                               |
@@ -50,7 +51,7 @@
 ## 环境与常用命令
 
 - 从项目根目录执行命令。Python 版本按 `pyproject.toml` 固定为 `3.13.11`，依赖使用 uv 管理，安装用 `uv sync`。
-- 配置项见 `.env.example` 和各 Settings 类。不要将实际 `.env` 内容、访问密钥或令牌写入文档、日志和测试输出。
+- 配置项见 `.env.example` 和各 Settings 类。不要将实际 `.env` 内容、访问密钥或令牌写入文档、日志和测试输出。Nacos 通用配置的示例见 `src/deal_pilot/config/nacos/rag_config_example.yaml`（不会自动加载，需在 Nacos 发布同名 dataId）；其中 `store` 段不会被 `RagConfig` 读取，实际字段名是 `milves_stores`。
 
 | 命令                                                                                                                               | 用途与前提                                                                              |
 | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |

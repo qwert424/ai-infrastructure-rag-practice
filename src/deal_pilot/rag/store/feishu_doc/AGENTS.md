@@ -25,7 +25,7 @@
 - `get_store.py:await get_store() -> Milvus` 返回 langchain-milvus 的 `Milvus` 实例，进程内单例：首次调用在模块级 `asyncio.Lock` 保护下先 `await init_store()`，再读取 `get_config("rag_config", RagConfig)`、用 `create_embedding_model(config.embedding_model)` 构造 embeddings，通过 `asyncio.to_thread` 创建 `Milvus` 后写入模块级 `_store`，后续调用直接返回该实例。
 - 构造参数固定：`collection_name="feishu_doc"`（取自 `init_store.COLLECTION_NAME`）、`primary_field="id"`、`text_field="text"`、`vector_field=["dense", "sparse"]`、`builtin_function=BM25BuiltInFunction(input_field_names="text", output_field_names="sparse")`、`enable_dynamic_field=True`、`auto_id=False`、`drop_old=False`；连接参数使用 `milvus_settings.uri` 与 `db_name`。
 - `Milvus` 构造及其内部客户端连接是同步调用，现通过 `asyncio.to_thread` 在线程中执行，不阻塞事件循环。缓存没有失效或重载机制：Nacos 配置、向量维度或索引重建后需重启进程才生效。锁只覆盖首次构造，不保护后续并发读写。
-- 本模块只构造并缓存实例，不封装写入或检索流程；写入与旧版本删除由 `graphs/feishu_doc_index` 直接调用 `aupsert`/`adelete`，检索尚未实现，也未接入 Agent。该模块依赖 `langchain-milvus`。
+- 本模块只构造并缓存实例，不封装写入或检索流程；写入与旧版本删除由 `graphs/feishu_doc_index` 直接调用 `aupsert`/`adelete`，检索由 `rag/retriever/feishu_doc.search` 使用该实例调用 `asimilarity_search_with_score`，均未接入 Agent 主流程。该模块依赖 `langchain-milvus`。
 
 ## 验证边界
 

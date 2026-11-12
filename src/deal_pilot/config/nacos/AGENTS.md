@@ -10,7 +10,7 @@
 
 - 所有资源使用 `nacos_settings.namespace_id`。AgentSpec、Prompt、Skill 查询当前使用 `production` label；通用配置使用 `deal_pilot` group，当前 `ConfigName` 支持 `sandbox_config` 和 `rag_config`。
 - AgentSpec 的 content 是 JSON；通用配置 content 是 YAML，使用 `yaml.safe_load` 后通过 Pydantic 校验，不将两种格式互换。
-- `RagConfig` 包含 `image_parser`、`embedding_model`、`splitter` 和 `milves_stores`；`MilvusCollection` 当前仅允许 `feishu_doc`。`splitter` 使用 `SplitterConfig`，默认 `chunk_size=1000`、`chunk_overlap=200`（单位字符），由索引图显式传给切片函数。省略 `milves_stores` 时默认生成该集合的 `RagStoreConfig`，其中 `index_type="HNSW"`、`metric_type="COSINE"`，没有索引构建参数字段。显式传入的 `milves_stores` 不会自动补齐缺失集合，初始化直接读取 `milves_stores["feishu_doc"]`。新集合 Schema 的向量维度取 `embedding_model.dimensions`（默认 1024），已有集合不随配置自动迁移。
+- `RagConfig` 包含 `image_parser`、`embedding_model`、`splitter`、`milves_stores` 和 `retriever`；`MilvusCollection` 当前仅允许 `feishu_doc`。`retriever` 使用 `RetrieverConfig`（`fetch_k=10`、`k=4`、`param=None`、`reranker`），`reranker` 使用 `RerankerConfig`，`reranker` 仅允许 `rrf`/`weighted`/`model`，默认 `rrf`，`params` 为自由字典，由检索模块解释（见 `rag/retriever/feishu_doc/AGENTS.md`）；`RagConfig` 不校验这些参数的组合与取值语义。`splitter` 使用 `SplitterConfig`，默认 `chunk_size=1000`、`chunk_overlap=200`（单位字符），由索引图显式传给切片函数。省略 `milves_stores` 时默认生成该集合的 `RagStoreConfig`，其中 `index_type="HNSW"`、`metric_type="COSINE"`，没有索引构建参数字段。显式传入的 `milves_stores` 不会自动补齐缺失集合，初始化直接读取 `milves_stores["feishu_doc"]`。新集合 Schema 的向量维度取 `embedding_model.dimensions`（默认 1024），已有集合不随配置自动迁移。
 - 系统指令来自资源 `instruction_{agent_name}/AGENTS__MD`，再拼接 `link_prompts`。这份远程指令服务于运行时 Agent，与仓库开发用 `AGENTS.md` 是不同内容，不自动上传仓库指令。
 - MCP 当前取 `backendEndpoints` 的第一个端点；工具元数据中的 `enabled=false` 转为禁用列表。修改选端逻辑时同步工厂的工具名前缀规则。
 - 当前业务码非零的降级分别为默认 AgentSpec、空 Prompt、缺失 MCP 或默认通用配置；不要把这种结果描述为成功读取远程配置。网络或解析错误也不等同于资源不存在。

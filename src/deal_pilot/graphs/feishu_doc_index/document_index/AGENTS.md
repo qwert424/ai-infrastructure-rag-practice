@@ -25,4 +25,6 @@
 ## 验证边界
 
 - 当前没有 `tests/units/test_feishu_doc_index.py`，也没有本子图的专门自动化测试。现有构树、Loader、Splitter 单元测试只覆盖各自本地能力，不能作为整条流水线验证。
-- 已有一轮真实运行（2026-11-12）：11 篇无图文档走通首次写入（写入后 `written_chunk_count` 非空、状态 success），7 篇含图文档在 `structure_document` 阶段失败并记入 failures，说明主图失败边界与统计可用。含图文档的下载→MinIO→识图完整链路、版本更新跳过、旧版本清理（`adelete`）与部分写入失败仍未验证。
+- 已有一轮真实运行（2026-11-12）：11 篇无图文档走通首次写入（写入后 `written_chunk_count` 非空、状态 success），7 篇含图文档在 `structure_document` 阶段失败并记入 failures，说明主图失败边界与统计可用。
+- 2026-11-13 重跑 7 篇含图文档（先删除其切片使版本比较判定需要索引）：下载→私有桶上传→识图完整链路走通，`failure_count=0`，8 个图片切片的 `content` 换成模型输出的完整描述，`payload` 记录 `feishu-images` 桶与文件名。本轮识图模型为调用进程内临时覆盖的 `vl-basic`（`qwen3-vl-plus`）；仓库默认配置下识图模型仍是纯文本的 `chat-basic`，区别见上级目录说明。
+- 版本变化后的覆盖写、旧版本清理（`adelete`）与部分写入失败仍未在真实服务上验证。

@@ -21,4 +21,7 @@
 - 每次工厂调用有独立的闭包迭代器；本地新运行也应重新 `await factory()`。导入及构图只定义流程，开始消费目录才请求飞书；没有跨进程恢复迭代器进度或自动注册调度计划的实现。
 - 子图已接通版本读取与比较、元数据、正文、构树、Loader、Splitter、Milvus 写入及旧版本实体清理；构树会真实执行图片下载、MinIO 上传与模型识图，任一图片失败会使整篇文档记为失败，具体限制见 `document_index/AGENTS.md`。
 - 当前不存在 `tests/units/test_feishu_doc_index.py`，不要将它列为可执行检查或声称已成体系覆盖索引图。现有 `tests/units/test_feishu_doc_schema.py` 覆盖 `build_metadata` 的空间标题来源与校验、Schema 同步及标题回填，其余节点无专门自动化测试；`tests/units/test_feishu.py` 覆盖飞书 Mock 与 `space_name` 填充范围。源码类型检查可用 `.venv/bin/pyright --pythonpath .venv/bin/python src/deal_pilot/graphs/feishu_doc_index`，执行结果需另行记录。
-- 已有一轮真实运行（2026-11-12）：18 个 Docx 节点中 11 篇无图文档写入成功（集合 `feishu_doc` 共 102 行），7 篇含图文档在图片下载处失败（飞书 `99991672`，缺 `docs:document.media:download`）。`adelete` 旧版本清理、版本未变跳过、部分写入失败均未触发，仍属未验证项；源码检查与单元测试不能证明全库索引完成。真实运行会写入并删除实体，应使用明确授权的数据范围。
+- 已有一轮真实运行（2026-11-12）：18 个 Docx 节点中 11 篇无图文档写入成功（集合 `feishu_doc` 共 102 行），7 篇含图文档在图片下载处失败（飞书 `99991672`，缺 `docs:document.media:download`）。
+- 2026-11-13 再跑一轮：飞书应用已具备图片下载权限，先删除 7 篇含图文档的切片强制重建，主图统计为 `node_count=18`、`indexed_count=7`、`skipped_count=11`、`failure_count=0`；集合恢复为 18 篇 180 行，8 个图片切片都有实际图片描述，`feishu-images` 桶为私有（无 BucketPolicy）且累计 24 个对象。本轮识图模型是在调用进程内临时覆盖为 LiteLLM 别名 `vl-basic`（`qwen_ai_platform/qwen3-vl-plus`），不是持久配置。
+- 当前配置差距：Nacos `public` 命名空间、`deal_pilot` group 下没有 `rag_config`（客户端读取返回 `20004 resource not found`），RagConfig 实际取 schema 默认值，识图模型因此回落到 `OPENAI_DEFAULT_MODEL`（`chat-basic` → 纯文本的 `qwen-flash`），图片只会被写成"图片内容无法辨认"。持久生效需要在 Nacos 发布 `rag_config` 并把 `image_parser.vl_model_config.name` 指向视觉模型别名；`image_parser_prompt` 走 Nacos AI Prompt registry，与 `rag_config` 无关。
+- `adelete` 旧版本清理、版本变化后的增量覆盖仍未在真实服务上触发；源码检查、单元测试和一次成功重跑都不能证明全库索引与检索可用。真实运行会写入并删除实体，应使用明确授权的数据范围。
