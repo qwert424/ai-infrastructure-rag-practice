@@ -1,5 +1,19 @@
 # Deal Pilot
 
+## 基础设施环境
+
+本仓库从 `ai-infrastructure-practice` 复制而来，Compose 项目名是 `deal-pilot-rag`（旧项目是
+`deal-pilot`），**容器 / 网络独立，宿主端口与数据卷则和旧项目共用**：
+
+- **端口一致**：Langfuse 3000、LiteLLM 4000、Nacos 8080/8848/9848、OpenSandbox 8090、
+  Langfuse MinIO 9000/9001、Shared MinIO 9002/9003。`.env` 里的端点无需修改。
+- **数据卷复用**：`docker-compose.yml` 里的 volumes 用 `external: true` + `name:` 指向旧项目的
+  `deal-pilot_*` 数据卷，Langfuse 的组织/项目/密钥与历史 trace、Nacos 配置、LiteLLM 模型、
+  MinIO 桶与凭证全部沿用，切换项目不需要重新配置任何东西。
+- **同一时间只启动一个**：端口和数据卷都是同一套，切换前先停掉当前那套
+  （本仓库 `docker compose down`，旧项目 `docker compose -p deal-pilot down`），
+  再在目标项目里执行 `make docker-recreate`。`down` 不会删除共享数据卷（volumes 声明为 external）。
+
 ## 启动服务
 
 **启动基础设施环境**
@@ -68,17 +82,17 @@ make debug
 
   ```shell
   # 配置管理员别名（使用 root 凭证）
-  docker exec deal-pilot-shared-minio-1 mc alias set shared http://localhost:9000 <root账号> <root密码>
+  docker compose exec shared-minio mc alias set shared http://localhost:9000 <root账号> <root密码>
 
   # 创建：按策略签发专用凭据，输出中的 accessKey / secretKey 写入 .env
-  docker cp resources/minio-policy.json deal-pilot-shared-minio-1:/tmp/minio-policy.json
-  docker exec deal-pilot-shared-minio-1 mc admin user svcacct add --policy /tmp/minio-policy.json shared root
+  docker compose cp resources/minio-policy.json shared-minio:/tmp/minio-policy.json
+  docker compose exec shared-minio mc admin user svcacct add --policy /tmp/minio-policy.json shared root
 
   # 查看
-  docker exec deal-pilot-shared-minio-1 mc admin user svcacct ls shared root
+  docker compose exec shared-minio mc admin user svcacct ls shared root
 
   # 撤销：占位值替换为实际的 Access Key
-  docker exec deal-pilot-shared-minio-1 mc admin user svcacct rm shared '<实际生成的 Access Key>'
+  docker compose exec shared-minio mc admin user svcacct rm shared '<实际生成的 Access Key>'
   ```
 
   **集成测试凭证**：`make test-integrations` 读取 `.env` 的 `MINIO_TEST_ACCESS_KEY` /

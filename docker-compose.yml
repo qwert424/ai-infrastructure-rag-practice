@@ -1,4 +1,8 @@
-name: deal-pilot
+# 容器与旧项目 ai-infrastructure-practice 的 `deal-pilot` 区分（本仓库项目名是 deal-pilot-rag），
+# 但宿主端口和数据卷与旧项目共用：端口一致，所以 .env 里的端点不用改；数据卷直接复用旧项目那套，
+# Langfuse 项目/密钥、Nacos 配置、LiteLLM 模型、MinIO 桶与凭证都无需重新配置。
+# 端口和数据卷是同一套，两个项目同一时间只能跑一个，先停掉当前那套再启动另一套即可。
+name: deal-pilot-rag
 services:
   langfuse-worker:
     image: docker.langfuse.com/langfuse/langfuse-worker:4
@@ -269,15 +273,40 @@ services:
       retries: 5
       start_period: 1s
 
+# 数据卷复用旧项目 deal-pilot 已经在用的那套（Langfuse 项目/密钥、Nacos 配置、LiteLLM 模型、
+# MinIO 桶与凭证都在里面），因此换项目名启动新容器后不需要重新配置任何东西。
+# 两个项目共用同一批数据卷，同一时间只能启动其中一个（端口也是同一套）。
 volumes:
   langfuse_clickhouse_data:
+    name: deal-pilot_langfuse_clickhouse_data
+    external: true
   langfuse_clickhouse_logs:
+    name: deal-pilot_langfuse_clickhouse_logs
+    external: true
   langfuse_minio_data:
+    name: deal-pilot_langfuse_minio_data
+    external: true
   langfuse_redis_data:
+    name: deal-pilot_langfuse_redis_data
+    external: true
   langfuse_postgres_data:
+    name: deal-pilot_langfuse_postgres_data
+    external: true
   litellm_postgres_data:
+    name: deal-pilot_litellm_postgres_data
+    external: true
   litellm_redis_data:
+    name: deal-pilot_litellm_redis_data
+    external: true
   nacos_data:
+    name: deal-pilot_nacos_data
+    external: true
   nacos_logs:
+    name: deal-pilot_nacos_logs
+    external: true
   opensandbox_server_data:
+    name: deal-pilot_opensandbox_server_data
+    external: true
   shared_minio_data:
+    name: deal-pilot_shared_minio_data
+    external: true
