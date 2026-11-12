@@ -527,6 +527,7 @@ dependencies = [
     { name = "httpx" },
     { name = "langchain" },
     { name = "langchain-mcp-adapters" },
+    { name = "langchain-milvus" },
     { name = "langchain-openai" },
     { name = "langchain-quickjs" },
     { name = "langchain-text-splitters" },
@@ -566,6 +567,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain", specifier = ">=1.3.15" },
     { name = "langchain-mcp-adapters", specifier = ">=0.3.2" },
+    { name = "langchain-milvus", specifier = ">=0.4.0" },
     { name = "langchain-openai", specifier = ">=1.4.1" },
     { name = "langchain-quickjs", specifier = ">=0.3.5" },
     { name = "langchain-text-splitters", specifier = ">=1.1.3" },
@@ -670,6 +672,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cc/28/c14e053b6762b1044f34a13aab6859bbf40456d37d23aa286ac24cfd9a5d/executing-2.2.1.tar.gz", hash = "sha256:3632cc370565f6648cc328b32435bd120a1e4ebb20c77e3fdde9a13cd1e533c4", size = 1129488, upload-time = "2025-09-01T09:48:10.866Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/ea/53f2148663b321f21b5a606bd5f191517cf40b7072c0497d3c92c4a13b1e/executing-2.2.1-py2.py3-none-any.whl", hash = "sha256:760643d3452b4d777d295bb167ccc74c64a81df23fb5e08eff250c425a4b2017", size = 28317, upload-time = "2025-09-01T09:48:08.5Z" },
+]
+
+[[package]]
+name = "faiss-cpu"
+version = "1.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/97/071a420d03c6624bfba215b5127f7cd6c6c3f08bdeaef575e079b9355643/faiss_cpu-1.16.0-cp310-abi3-macosx_15_0_arm64.whl", hash = "sha256:fe430200c5b91eff67ebb9fe3958963d3ae7dfb341e3af7c1102ecf6ade4378e", size = 5251785, upload-time = "2026-11-10T16:40:52.44Z" },
+    { url = "https://files.pythonhosted.org/packages/76/cd/c3c8bdbeaad9f608ae35bf542ca6b2d4d9edc8295524fc14c3ffa6d68a79/faiss_cpu-1.16.0-cp310-abi3-macosx_15_0_x86_64.whl", hash = "sha256:67f5072c8cdaaa9950affd12b43e21bde5715bc788ec36831d135c4ecae2d035", size = 7946329, upload-time = "2026-11-10T16:40:54.355Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/56/ca6813847b5ce85c6281f252c8c09f0d16fedb5640659643f847570e20fd/faiss_cpu-1.16.0-cp310-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f9c355a466dd9fe0b1e7cc39c57d5d57380754e4facb74c62533b2e9b9b8ee82", size = 10847740, upload-time = "2026-11-10T16:40:56.421Z" },
+    { url = "https://files.pythonhosted.org/packages/19/a8/82737cf7c2171287ca38c9e0b07e62607c4ab1cbfaaec5f8919595ca44b5/faiss_cpu-1.16.0-cp310-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:876abdd551465c9a81c27eda6f42cbe76d17592acb582834e9ec53b763ff5724", size = 19485185, upload-time = "2026-11-10T16:40:58.511Z" },
+    { url = "https://files.pythonhosted.org/packages/80/84/8c47930b4d5b5bb47a99bccb758e739a65913e69dc8046347b45891ef888/faiss_cpu-1.16.0-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:13a17fa40f26aad4e6e6d38b406210721b541398ce70091165af5b5c32e5c9ab", size = 12454436, upload-time = "2026-11-10T16:41:00.661Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/5e/c9088fc202e7f765ead1d70c6b3e2e4894cf9a198f77be86fa2fbc480bfe/faiss_cpu-1.16.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:f4ba44201cbaa6612df1af35979aee6a972e9e75942f607f3cc90343646fb51a", size = 20247117, upload-time = "2026-11-10T16:41:02.535Z" },
 ]
 
 [[package]]
@@ -1498,6 +1517,20 @@ wheels = [
 ]
 
 [[package]]
+name = "langchain-milvus"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "milvus-lite", marker = "sys_platform != 'win32'" },
+    { name = "pymilvus" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/25/56/a763b0cd81d1e70df8d1b4dd409f03e90968c42db86046d973b516c05b63/langchain_milvus-0.4.0.tar.gz", hash = "sha256:5fd962874bd0fec1dfd87513610807fcf7abf8c1ec8a868819c0b02483c9708f", size = 36053, upload-time = "2026-07-17T03:38:03.852Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/17/985a3c214d21a660b6b8ae707d5c231f2aaa27b2a464b1906a3c4d6184d3/langchain_milvus-0.4.0-py3-none-any.whl", hash = "sha256:c60611cb244928a5fc6c4e905fcd0efa146ef1d2c26edf0a907bc844da3d7ff0", size = 39453, upload-time = "2026-07-17T03:38:02.957Z" },
+]
+
+[[package]]
 name = "langchain-openai"
 version = "1.6.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1861,6 +1894,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "milvus-lite"
+version = "3.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "faiss-cpu" },
+    { name = "grpcio" },
+    { name = "numpy" },
+    { name = "pyarrow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/47/e2/ac0c50e571661b1fc4d6ad075a3961f51f9c578a078e132b277eb25324e3/milvus_lite-3.2.2.tar.gz", hash = "sha256:c171dd372071d06425b478975562c5a1c13178333a74883eb04e8a8e6fca1d28", size = 765527, upload-time = "2026-10-13T08:38:34.584Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/a1/369dc72338c9fe96a21199281ddf29d3797dba5c582f25db59ff9d2df300/milvus_lite-3.2.2-py3-none-any.whl", hash = "sha256:106e2437054713afa31208cd081f1e2682253213949a5f544d983dfce1b3a16d", size = 276845, upload-time = "2026-10-13T08:38:30.657Z" },
 ]
 
 [[package]]
@@ -2378,6 +2426,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/da/9f/abfd2959e9261dd5217ca8551d4de211ca6ab26fe9b72cf44731ff6c4442/pure_eval-0.2.4.tar.gz", hash = "sha256:260c2774686e651b79f8b8e7fc9d80b3599ea6a66334b47d5f4abb69fc2c0ea1", size = 20563, upload-time = "2026-09-10T21:41:22.836Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/18/83376915176eb058cb86470eb7396388a13350b09a8f233a79303bbcbc5b/pure_eval-0.2.4-py3-none-any.whl", hash = "sha256:96cae060a313cfaad51bb761278bfb0e62dc0248d9315a81173752dc546cd37a", size = 11893, upload-time = "2026-09-10T21:41:21.532Z" },
+]
+
+[[package]]
+name = "pyarrow"
+version = "26.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bc/5e/9cb2a56d5e293aab4e2fbecc5b0620d93227d66b8d5a63c554c31e1f80fe/pyarrow-26.0.1.tar.gz", hash = "sha256:93affcbd8a343e98dc19e9ec8fe17271ebf8fe98102d8b7454175074409f8b72", size = 1237985, upload-time = "2026-11-03T10:54:17.563Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/b8/c31c51fbe7df901817d88c73eeec25079d0da5f7c7b67fc0bf071f6a2df5/pyarrow-26.0.1-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:4cb739ccb87292c673e1f69819b68432a73bb8bb456e8599641bba9183a8a1dd", size = 37292947, upload-time = "2026-11-03T10:50:12.333Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/63/0c2559ae33ce59d2ca5ce74117676f8ff8da4cf102729a158ea46415eb50/pyarrow-26.0.1-cp313-cp313-macosx_12_0_x86_64.whl", hash = "sha256:50b40aea92f43b2b6da3427548a5337741b4b93b92e8015a8a3eefc0e75acca2", size = 39767535, upload-time = "2026-11-03T10:50:18.254Z" },
+    { url = "https://files.pythonhosted.org/packages/31/02/d9462d1ae4e54c3964af38316a802b29c28970b7d375722ef190af736640/pyarrow-26.0.1-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:a3a79661404ba3d41b7c9a45cb56113246a244b38cb1393fadae289bc66b91b4", size = 51815955, upload-time = "2026-11-03T10:50:25.332Z" },
+    { url = "https://files.pythonhosted.org/packages/96/54/33c2df56948d88a4d83a52999a4a81a4871b2de481ff25ccd6f5ccd2589a/pyarrow-26.0.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:f71221bbc7707e3fad920d0478db9350791d4714ec445299ee0d56559fbc156c", size = 55038406, upload-time = "2026-11-03T10:50:32.551Z" },
+    { url = "https://files.pythonhosted.org/packages/99/57/8e1f886ee96c7edab89ab6f15fbb00c85c2bb2173f3cb504925731d00564/pyarrow-26.0.1-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:8ccfb9958bcd09f34678c64fb42a0e270b47cd092ae79578da51e0d7bb144296", size = 55437362, upload-time = "2026-11-03T10:50:39.89Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/c3/d87939a5f6cd30bb406bad6c20926fcedafc52ec5629f6eb27e4cd5db709/pyarrow-26.0.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:029e881af986375a2731da79c999fe734a72547fabb16503d65fc079d4bc7eb2", size = 58618865, upload-time = "2026-11-03T10:50:48.029Z" },
 ]
 
 [[package]]

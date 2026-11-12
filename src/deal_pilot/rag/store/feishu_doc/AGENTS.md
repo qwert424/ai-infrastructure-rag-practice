@@ -17,6 +17,13 @@
 - `await drop_index(collection_name, *, client) -> None` 先 `release_collection`，再按 `DENSE_INDEX_NAME` 删除稠密索引；不删除集合、实体或稀疏索引，不负责重建或重新加载。释放期间集合不可查询/检索；后续操作失败时不会自动恢复加载状态。
 - 辅助函数不创建或关闭客户端；`init_store` 统一在 `finally` 中关闭。异常及取消不被捕获转换；已完成的数据库操作不回滚。初始化必须显式调用，尚未接入 Agent 或服务启动流程。
 
+## 向量库实例
+
+- `get_store.py:await get_store() -> Milvus` 返回 langchain-milvus 的 `Milvus` 实例，进程内单例：首次调用在模块级 `asyncio.Lock` 保护下先 `await init_store()`，再读取 `get_config("rag_config", RagConfig)`、用 `create_embedding_model(config.embedding_model)` 构造 embeddings，创建 `Milvus` 后写入模块级 `_store`，后续调用直接返回该实例。
+- 构造参数固定：`collection_name="feishu_doc"`（取自 `init_store.COLLECTION_NAME`）、`primary_field="id"`、`text_field="text"`、`vector_field=["dense", "sparse"]`、`builtin_function=BM25BuiltInFunction(input_field_names="text", output_field_names="sparse")`、`enable_dynamic_field=True`、`auto_id=False`、`drop_old=False`；连接参数使用 `milvus_settings.uri` 与 `db_name`。
+- `Milvus` 构造及其内部客户端连接是同步调用，直接在事件循环中执行。缓存没有失效或重载机制：Nacos 配置、向量维度或索引重建后需重启进程才生效。锁只覆盖首次构造，不保护后续并发读写。
+- 仅构造并缓存实例，尚未封装写入或检索流程，也未接入 Agent；该模块依赖 `langchain-milvus`。
+
 ## 验证边界
 
 - 当前没有对应的存储单元测试或集成测试文件；源码与本地 SDK 参数构造不能证明真实 Milvus 行为。
