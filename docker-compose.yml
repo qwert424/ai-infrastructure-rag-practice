@@ -273,6 +273,81 @@ services:
       retries: 5
       start_period: 1s
 
+  # Milvus Standalone（v3.0.2）：专用 etcd / MinIO，不复用 Shared MinIO，
+  # 也不加载其他练习留下的 milvus_data。仅供课件通过 PyMilvus 连接，未开启身份认证。
+  milvus:
+    image: milvusdb/milvus:v3.0.2
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      TZ: Asia/Shanghai
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+      MINIO_REGION: us-east-1
+      MINIO_ACCESS_KEY_ID: ${MILVUS_MINIO_ROOT_USER}
+      MINIO_SECRET_ACCESS_KEY: ${MILVUS_MINIO_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:19530:19530" # SDK / gRPC
+      - "127.0.0.1:9091:9091" # 健康检查与 WebUI
+    volumes:
+      - milvus_standalone_data:/var/lib/milvus
+    depends_on:
+      milvus-etcd:
+        condition: service_healthy
+      milvus-minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # 首次启动要初始化元数据与集合，90 秒内未就绪属正常
+      start_period: 90s
+
+  # Milvus 专用元数据存储，与其他服务无关
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.25
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command:
+      - etcd
+      - --advertise-client-urls=http://milvus-etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - milvus_standalone_etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Milvus 专用对象存储，只在宿主回环地址暴露，不和 Shared MinIO 争端口
+  milvus-minio:
+    image: milvusdb/minio:RELEASE.2024-12-18T13-15-44Z
+    restart: unless-stopped
+    command: ["minio", "server", "/minio_data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MILVUS_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MILVUS_MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:19001
+    ports:
+      - "127.0.0.1:19000:9000" # Milvus 专用对象存储 API
+      - "127.0.0.1:19001:9001" # Milvus 专用 MinIO 控制台
+    volumes:
+      - milvus_standalone_minio_data:/minio_data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
 # 数据卷复用旧项目 deal-pilot 已经在用的那套（Langfuse 项目/密钥、Nacos 配置、LiteLLM 模型、
 # MinIO 桶与凭证都在里面），因此换项目名启动新容器后不需要重新配置任何东西。
 # 两个项目共用同一批数据卷，同一时间只能启动其中一个（端口也是同一套）。
@@ -310,3 +385,11 @@ volumes:
   shared_minio_data:
     name: deal-pilot_shared_minio_data
     external: true
+  # Milvus 专用卷：显式命名（不带项目前缀），确保是全新卷，
+  # 不会误加载其他练习或旧项目遗留的 milvus 数据。
+  milvus_standalone_data:
+    name: milvus_standalone_data
+  milvus_standalone_etcd_data:
+    name: milvus_standalone_etcd_data
+  milvus_standalone_minio_data:
+    name: milvus_standalone_minio_data
