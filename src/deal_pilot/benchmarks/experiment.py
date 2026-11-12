@@ -6,7 +6,10 @@ from deal_pilot.benchmarks.evaluators.retrieve import retrieve_eval_config
 langfuse = get_client()
 
 
-_config: dict[str, EvalConfig] = {"retrieve": retrieve_eval_config}
+_config: dict[str, EvalConfig] = {
+    "retrieve": retrieve_eval_config,
+    "retrieve-multiwheel": retrieve_eval_config,
+}
 
 
 def registered_datasets() -> set[str]:

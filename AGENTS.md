@@ -15,7 +15,7 @@
 
 - 当前项目是 Python Agent 服务：以 LangGraph Server 提供运行入口，以 Deep Agents 组装 Agent，以 Nacos 管理 AgentSpec、Prompt、Skill、MCP 与沙箱配置。
 - Langfuse 用于追踪、离线评测和 Webhook；OpenSandbox 提供用户执行环境；MinIO 用于产物存储与交付；模型通过 OpenAI 兼容接口及自定义模型适配层调用。
-- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索由 `rag/retriever/feishu_doc` 的 `search()` 提供（双路召回加重排），并由独立图 `retrieve_agent` 的 `before_agent` 中间件在每轮开始前调用、把结果作为消息注入；未注册为工具，也未接入 `main_agent`。存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
+- 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片，并通过 `graphs/feishu_doc_index` 按知识库目录分批执行版本比较、切片写入 Milvus 与旧版本清理。检索由 `rag/retriever/feishu_doc` 的 `search()` 提供（双路召回加重排），既由独立图 `retrieve_agent` 的 `before_agent` 中间件在每轮开始前调用、把结果作为消息注入，也注册为工具 `milvus_search`；`milvus_query` 按标量表达式读取切片。两者都未接入 `main_agent` 的中间件。存储初始化由索引图首次写入时显式触发，未接入 Agent 主流程或服务启动流程。
 - 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。课件与 RAG 存储模块通过 PyMilvus 连接，不依赖 Milvus Lite。Milvus 的文本重排凭据放在本地 `docker/milvus/user.yaml`（已 gitignore，按 `user.yaml.example` 创建），只读挂载到容器 `/milvus/configs/user.yaml`；该文件含 API Key，不得入库或写进文档。
 - `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；已被 `graphs/feishu_doc_index` 索引流程调用，尚未接入 Agent 主流程；本地 Mock 测试不代表真实租户验证。
 - 鉴权当前使用 `utils/mock_user.py` 中的模拟用户；告警 Webhook 已验签并接收事件，尚未实现短信或邮件通知。

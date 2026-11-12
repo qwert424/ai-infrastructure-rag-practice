@@ -3,7 +3,7 @@
 ## 职责与入口
 
 - `shared.py` 提供 `EvalConfig`（`task`、`evaluators`、可选 `composite_evaluator`）、`run_agent(agent_name, input)`、`create_llm_score_evaluator(name, output_extract=None, threshold=0.8)`，以及 `correctness`/`completeness` 的内置 Prompt 与 `AnswerEvaluation` 结构。
-- `retrieve.py` 提供 `retrieve_precision_eval`、`retrieve_recall_eval`、`experiment_task` 和 `retrieve_eval_config`。
+- `retrieve.py` 提供 `retrieve_precision_eval`、`retrieve_recall_eval`、`experiment_task` 和 `retrieve_eval_config`。当前 `retrieve_eval_config` 只启用 `correctness`/`completeness`，precision/recall 在 `evaluators` 与 `metric_names` 中均被注释停用；启用时两处必须同时恢复。
 - `experiment.py` 按数据集名从 `_config` 取配置；未注册的数据集抛 `RuntimeError`（`DS=all` 在调用前就跳过），不会回退到其他数据集的评分器。
 
 ## 评分契约

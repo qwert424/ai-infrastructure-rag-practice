@@ -70,14 +70,14 @@ async def experiment_task(*, item: DatasetItem, **kwargs):
 retrieve_eval_config = EvalConfig(
     task=experiment_task,  # type: ignore
     evaluators=[
-        retrieve_precision_eval,
-        retrieve_recall_eval,
+        # retrieve_precision_eval,
+        # retrieve_recall_eval,
         create_llm_score_evaluator("correctness", lambda output: output["answer"]),
         create_llm_score_evaluator("completeness", lambda output: output["answer"]),
     ],
     metric_names=[
-        "retrieve_precision",
-        "retrieve_recall",
+        # "retrieve_precision",
+        # "retrieve_recall",
         "correctness",
         "completeness",
     ],

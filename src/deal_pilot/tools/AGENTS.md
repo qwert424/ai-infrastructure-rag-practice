@@ -11,6 +11,10 @@
 - `web_search`、`fetch_url` 调用同步 Tavily SDK，通过 `asyncio.to_thread` 隔离阻塞；保留原有结构化响应。
 - `ask_user_question` 使用 LangGraph interrupt 暂停，返回恢复时的答案；问题为 2–5 个选项，标题唯一，最多一个推荐项。不要在可重放的 interrupt 前加入不可重复的外部副作用。
 - `get_current_time` 当前返回宿主机本地时区的 ISO 时间，虽然工具描述称北京时间，实现未固定 `Asia/Shanghai`；修改时间语义时同时更新描述与测试。
+- `milvus_search` 复用 `rag/retriever/feishu_doc.search()`，只暴露 `question` 与可选 `filter`；候选数、返回数与重排方式来自 Nacos `rag_config.retriever`，工具自身不提供向量或分数参数。
+- `milvus_query` 直接调用 `store.aclient.query` 读取切片：`limit` 限 1–100，`offset + limit` 不超过 16384，输出字段排除 `dense`/`sparse`，动态字段经 `$meta` 返回。
+- 两个工具都接受模型填写的 Milvus 过滤表达式，表达式原样传给 Milvus，不做转义、字段白名单或空值处理；空字符串表示不筛选。首次调用沿用 `get_store()` 的存储初始化行为。
+- 空白问题与超分页上限使用 `ToolException`（可修复错误）；无效表达式、配置与 Milvus 连接错误向上传播，不转换为空列表。
 
 ## Deploy 数据与错误契约
 

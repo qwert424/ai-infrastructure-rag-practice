@@ -9,5 +9,5 @@
 
 ## 边界
 
-- 本模块未注册为 Agent 工具，也未接入主 Agent、服务启动流程或评测流程；`retrieve_agent` 图经 `middlewares/retrieve_context.py` 读取 `rag_config.retriever` 后调用 `search(config=...)`。
+- 本模块已通过 `tools/milvus.py` 的 `milvus_search` 注册为 Agent 工具（未接入主 Agent、服务启动流程或评测流程）；`retrieve_agent` 图另经 `middlewares/retrieve_context.py` 读取 `rag_config.retriever` 后调用 `search(config=...)`。
 - 仓库中没有检索的单元测试或集成测试；引用真实检索结果时须注明数据范围与时间。
