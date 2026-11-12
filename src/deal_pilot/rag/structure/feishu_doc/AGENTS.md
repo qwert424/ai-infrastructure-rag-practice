@@ -30,10 +30,16 @@
   不实现完整 IAM 策略求值；当前 MinIO 的 GetBucketPolicyStatus 在公共读场景中返回非公开，不能用其代替此检查。
   无法读取策略时错误传播，只有 NoSuchBucketPolicy 表示无公共策略。检查与上传不是原子操作，不防止管理员并发修改桶策略。
 - `await image_parser._attachment_info(image_block) -> AttachmentInfo` 读取同一配置的 sibling_count。
-  parent_trace 按根到父排列，仅移除空字符串内容；prevs 取最近 n 个兄弟（包括已处理的图片），按文档顺序返回；
-  nexts 跳过图片后补足最近 n 个非图片兄弟，按文档顺序返回。两侧均不跨父节点，空内容的兄弟仍计数，
-  不递归拼接兄弟子树；n=0 两侧为空，负数抛 ValueError。辅助函数尚未接入 parse_image_block 的占位流程。
-- 图片辅助函数本地验证：`.venv/bin/python -m pytest -q tests/units/test_feishu_doc_image_parser.py`；
+  parent_trace 按根到父排列，仅保留非空内容；prevs 与 nexts 都只取同父兄弟中**内容非空白且非图片**的节点，
+  按文档顺序各返回最近 n 个，空文本块与其他图片不占名额；两侧均不跨父节点，不递归拼接兄弟子树；
+  n=0 两侧为空，负数抛 ValueError。飞书常用空文本块占位，若不跳过会得到空字符串上下文。
+  `parse_image_block` 已使用该函数组装提示词。
+- 识图模型必须支持视觉：`rag_config.image_parser.vl_model_config.name` 指向的网关别名若不含多模态能力，
+  模型会忽略图片并编造内容或回答“无法辨认”，且结果会写入切片。2026-11-13 实测同一网关下
+  `chat-basic` 不识别图片（纯色测试图答错颜色），`chat-basic-backup` 能正确识别并描述真实照片；
+  更换别名后需让 Nacos 配置重新加载。网关另行限制请求体大小，2 MB 级 PNG 转 base64 约 3 MB，需留意上限。
+- 图片辅助函数本地验证：`.venv/bin/python -m pytest -q tests/units/test_feishu_doc_image_parser.py`，
+  覆盖上下文过滤（空白/图片/计数上限/负值）与 Data URL 生成；
   MinIO 真实验证：`MINIO_INTEGRATION=1 .venv/bin/python -m pytest -q --tb=short tests/intergrations/test_minio.py -k 'upload_bytes or image_upload_minio'`。
 - 本次可用 `.venv/bin/pyright --pythonpath .venv/bin/python src/deal_pilot/rag/structure/feishu_doc` 检查类型；不依赖真实飞书服务。
 - 单元测试：`.venv/bin/python -m pytest -q tests/units/test_feishu_doc_tree_builder.py`；覆盖阅读顺序、乱序输入、嵌套、各级标题归组及容器边界、父子/兄弟引用、未知类型、各文本字段和行内元素、图片 token、代码语言、表格属性复制、payload 独立性、输入不变、深树及异常输入；另验证构树后收集全部图片、文档顺序串行处理及前图完成后再启动后图、原地更新、无图片、图片根节点、失败及取消传播。测试通过 `asyncio.run` 调用异步入口，图片处理全部 Mock，无需新增 pytest 异步插件；不代表真实图片服务验证。temp 中的文档 JSON 是单独读取真实文档生成的检查产物，不属于单元测试 fixture。

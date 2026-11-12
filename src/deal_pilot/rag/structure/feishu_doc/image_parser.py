@@ -93,7 +93,7 @@ async def _upload_minio(data: bytes, mime: str, block_id: str) -> ImageLocation:
 
 
 async def _attachment_info(image_block: BlockNode) -> AttachmentInfo:
-    """仅从父链及同父兄弟提取图片上下文，不修改树。"""
+    """仅从父链及同父兄弟提取图片上下文，跳过空白文本与其他图片节点。"""
     config = await get_config("rag_config", RagConfig)
     count = config.image_parser.sibling_count
     if count < 0:
@@ -113,7 +113,9 @@ async def _attachment_info(image_block: BlockNode) -> AttachmentInfo:
         and previous.parent is image_block.parent
         and len(prevs) < count
     ):
-        prevs.append(previous.content)
+        # 飞书常用空文本块占位，图片 token 对下游无意义，均不能作为上下文。
+        if previous.block_type != BlockType.IMAGE and previous.content.strip():
+            prevs.append(previous.content)
         previous = previous.prev
     prevs.reverse()
 
@@ -124,7 +126,7 @@ async def _attachment_info(image_block: BlockNode) -> AttachmentInfo:
         and following.parent is image_block.parent
         and len(nexts) < count
     ):
-        if following.block_type != BlockType.IMAGE:
+        if following.block_type != BlockType.IMAGE and following.content.strip():
             nexts.append(following.content)
         following = following.next
     return AttachmentInfo(parent_trace=parent_trace, prevs=prevs, nexts=nexts)
